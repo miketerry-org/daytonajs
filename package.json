@@ -1,0 +1,39 @@
+{
+  "type": "module",
+  "name": "daytonajs",
+  "version": "0.0.1",
+  "description": "Daytona is a convention over configuration MVC web application framework",
+  "main": "index.js",
+  "scripts": {
+    "start": "NODE_ENV=production node index.js",
+    "staging": "NODE_ENV=staging node index.js",
+    "dev": "NODE_ENV=development nodemon index.js",
+    "test": "ormond"
+  },
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miketerry-org/daytonajs.git"
+  },
+  "keywords": [
+    "daytona",
+    "mvc",
+    "server",
+    "mongodb",
+    "mysql",
+    "postgres",
+    "sqlite"
+  ],
+  "author": "Mike Terry",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/miketerry-org/daytonajs/issues"
+  },
+  "homepage": "https://github.com/miketerry-org/daytonajs#readme",
+  "dependencies": {
+    "daytona-mvc": "^0.0.1"
+  }
+}

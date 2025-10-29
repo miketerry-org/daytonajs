@@ -1,0 +1,4 @@
+.ds_store
+.env
+.git
+node_modules
