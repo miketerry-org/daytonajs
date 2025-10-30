@@ -1,13 +1,13 @@
 {
   "type": "module",
-  "name": "daytonajs",
-  "version": "0.0.1",
+  "name": "daytona-mvc",
+  "version": "0.1.0",
   "description": "Daytona is a convention over configuration MVC web application framework",
   "main": "index.js",
   "scripts": {
     "start": "NODE_ENV=production node index.js",
     "staging": "NODE_ENV=staging node index.js",
-    "dev": "NODE_ENV=development nodemon index.js",
+    "dev": "NODE_ENV=development nodemon dev.js",
     "test": "ormond"
   },
   "directories": {
@@ -34,6 +34,10 @@
   },
   "homepage": "https://github.com/miketerry-org/daytonajs#readme",
   "dependencies": {
-    "daytona-mvc": "^0.0.1"
+    "@iarna/toml": "^2.2.5",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "mongodb": "^6.20.0"
   }
 }
