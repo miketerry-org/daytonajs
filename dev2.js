@@ -8,17 +8,16 @@ const config = new Config().loadObject({
   DRIVER_NAME: "mongodb",
   DATABASE_URI: "mongodb://localhost:27017/test",
 });
-console.log(config);
-
-const db = new Database(config);
 
 (async () => {
   try {
-    await db.connect();
+    const db = await Database.create(config);
     try {
+      console.log("db", db);
+      console.log("connected", db.connected);
       console.log(Registry.list());
     } finally {
-      await db.disconnect();
+      // await db.disconnect();
     }
   } catch (err) {
     console.error(err);
