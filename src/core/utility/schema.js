@@ -1,4 +1,4 @@
-// domainSchema.js:
+// src/core/utility/schema.js:
 
 "use strict";
 
@@ -9,7 +9,7 @@
  * Supports relational and document database targets through adapters.
  * Provides validation, indexing, and type-safe field declarations.
  */
-export default class DomainSchema {
+export default class Schema {
   constructor() {
     /**
      * @private
