@@ -2,7 +2,7 @@
   "type": "module",
   "name": "daytona-mvc",
   "version": "0.1.0",
-  "description": "Daytona is a convention over configuration MVC web application framework",
+  "description": "Daytona: The JavaScript MVC framework with batteries included. Build using convention over configuration.",
   "main": "index.js",
   "scripts": {
     "start": "NODE_ENV=production node index.js",

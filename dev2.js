@@ -17,7 +17,7 @@ const config = new Config().loadObject({
       console.log("connected", db.connected);
       console.log(Registry.list());
     } finally {
-      // await db.disconnect();
+      await db.disconnect();
     }
   } catch (err) {
     console.error(err);
