@@ -12,7 +12,7 @@ import msg from "./msg.js";
  * Subclasses may optionally use a `Config` instance. If no config is provided,
  * the Base class gracefully disables configuration-related features.
  */
-export default class Base {
+export default class BaseClass {
   #config;
 
   /**
