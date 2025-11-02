@@ -2,9 +2,9 @@
 
 "use strict";
 
-import Driver from "./driver.js";
+import BaseDriver from "../../base/base-driver.js";
 
-export default class SQLDriver extends Driver {
+export default class SQLDriver extends BaseDriver {
   constructor(config = {}) {
     super(config);
     this.db = null; // concrete subclass must initialize this

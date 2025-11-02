@@ -1,10 +1,10 @@
-// driverMariaDB.js
+// mariadb-driver.js
 
 "use strict";
 
-import verify from "../foundation/verify.js";
-import SQLDriver from "./driverSQL.js";
-import Registry from "./registry.js";
+import verify from "../../utility/verify.js";
+import SQLDriver from "./sql-driver.js";
+import DriverRegistry from "../driver-registry.js";
 
 export default class MariaDBDriver extends SQLDriver {
   constructor(config = {}) {
@@ -98,4 +98,4 @@ export default class MariaDBDriver extends SQLDriver {
 }
 
 // Register the MariaDB driver globally
-Registry.add("mariadb", MariaDBDriver);
+DriverRegistry.add("mariadb", MariaDBDriver);
