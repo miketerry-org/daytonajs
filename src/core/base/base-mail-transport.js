@@ -1,6 +1,7 @@
 "use strict";
 
-import { Base, Config } from "milwaukee-foundation";
+import Config from "../utility/config.js";
+import BaseClass from "./base-class.js";
 
 /**
  * @file MailTransport.js
@@ -9,7 +10,7 @@ import { Base, Config } from "milwaukee-foundation";
  * Concrete transports (SMTP, Postmark, SendGrid, etc.) must extend this class
  * and implement `sendMail()`.
  */
-export default class MailTransport extends Base {
+export default class MailTransport extends BaseClass {
   /**
    * @param {Config} config - Required configuration instance.
    * @throws {TypeError} If config is missing or not a Config instance.

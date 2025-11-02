@@ -8,7 +8,7 @@
  * It provides validated CRUD operations and domain-centric access
  * to persistence functionality.
  */
-export default class DomainModel {
+export default class BaseModel {
   /**
    * @param {string} name - Logical name of the model (e.g. "User", "Order").
    * @param {DomainSchema} schema - Associated DomainSchema instance.

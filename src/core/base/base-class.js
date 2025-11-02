@@ -1,7 +1,9 @@
+// src/core/base/index.js:
+//
 "use strict";
 
-import Config from "./config.js";
-import msg from "./msg.js";
+import Config from "../utility/config.js";
+import msg from "../utility/msg.js";
 
 /**
  * @module base

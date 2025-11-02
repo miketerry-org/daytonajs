@@ -9,7 +9,7 @@
  * multiple DomainModel instances. Provides convenience access to the shared
  * DAO connection and transaction management.
  */
-export default class DomainService {
+export default class BaseService {
   /**
    * @param {DomainModel[]} models - Array of DomainModel instances.
    * @throws {Error} If no models are provided or invalid model objects are passed.

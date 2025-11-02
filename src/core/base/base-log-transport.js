@@ -1,9 +1,9 @@
-// logTransport.js:
+// base-log-transport.js:
 
 "use strict";
 
 // load all necessary modules
-import msg from "./msg.js";
+import msg from "../utility/msg.js";
 
 export default class LogTransport {
   constructor(name, options = {}) {

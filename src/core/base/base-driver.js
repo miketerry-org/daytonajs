@@ -3,9 +3,9 @@
 "use strict";
 
 // load all necessary modules
-import Base from "../foundation/base.js";
+import BaseClass from "./base-class.js";
 
-export default class Driver extends Base {
+export default class Driver extends BaseClass {
   constructor(config = {}) {
     super(config);
   }
