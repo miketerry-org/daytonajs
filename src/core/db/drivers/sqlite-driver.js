@@ -2,8 +2,8 @@
 
 "use strict";
 
-import SQLDriver from "./driverSQL.js";
-import Registry from "./registry.js";
+import SQLDriver from "./sql-driver.js";
+import DriverRegistry from "../driver-registry.js";
 
 export default class SQLiteDriver extends SQLDriver {
   constructor(config = {}) {
@@ -87,4 +87,4 @@ export default class SQLiteDriver extends SQLDriver {
 }
 
 // register SQLite database driver
-Registry.add("sqlite", SQLiteDriver);
+DriverRegistry.add("sqlite", SQLiteDriver);

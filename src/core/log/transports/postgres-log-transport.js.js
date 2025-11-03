@@ -2,8 +2,8 @@
 
 "use strict";
 
-import LogTransport from "./logTransport.js";
-import logLevels from "./logLevels.js";
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
 
 const pkg = null;
 // const { Client } = pkg;

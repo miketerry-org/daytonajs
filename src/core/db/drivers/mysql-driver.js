@@ -2,9 +2,9 @@
 
 "use strict";
 
-import verify from "../foundation/verify.js";
-import SQLDriver from "./driverSQL.js";
-import Registry from "./registry.js";
+import verify from "../../utility/verify.js";
+import SQLDriver from "./sql-driver.js";
+import DriverRegistry from "../driver-registry.js";
 
 export default class MySQLDriver extends SQLDriver {
   constructor(config = {}) {
@@ -104,4 +104,4 @@ export default class MySQLDriver extends SQLDriver {
 }
 
 // register the MySQL database driver
-Registry.add("mysql", MySQLDriver);
+DriverRegistry.add("mysql", MySQLDriver);

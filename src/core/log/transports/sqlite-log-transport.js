@@ -2,8 +2,11 @@
 
 "use strict";
 
-import LogTransport from "./logTransport.js";
-import levels from "./logLevels.js";
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
+
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
 
 // this import is done lazy when the first instance of the class is created
 let createClient = null;

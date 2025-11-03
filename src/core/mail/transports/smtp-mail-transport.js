@@ -2,9 +2,9 @@
 
 "use strict";
 
-import MailTransport from "./MailTransport.js";
-import msg from "./msg.js";
-import { verify } from "milwaukee-foundation";
+import BaseMailTransport from "../../base/base-mail-transport.js";
+import msg from "../../utility/msg.js";
+import verify from "../../utility/verify.js";
 
 // Declare nodemailer placeholder
 let nodemailer;
@@ -15,7 +15,7 @@ let nodemailer;
  * @description
  * Sends messages via an SMTP server using Nodemailer.
  */
-export default class SMTPTransport extends MailTransport {
+export default class SMTPTransport extends BaseMailTransport {
   /**
    * @param {Config} config - Must include smtp.host, smtp.port, smtp.auth.user, smtp.auth.pass
    */

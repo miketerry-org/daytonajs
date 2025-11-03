@@ -2,8 +2,8 @@
 
 "use strrict";
 
-import LogTransport from "./logTransport.js";
-import logLevels from "./logLevels.js";
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
 
 export default class ConsoleLogTransport extends LogTransport {
   constructor(options = {}) {

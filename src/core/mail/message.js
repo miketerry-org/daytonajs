@@ -1,6 +1,8 @@
-// message.js:"use strict";
+// message.js:
 
-import { Base } from "milwaukee-foundation";
+"use strict";
+
+import BaseClass from "../base/base-class.js";
 
 /**
  * @file Message.js
@@ -8,7 +10,7 @@ import { Base } from "milwaukee-foundation";
  * Represents an email message to be sent via a MailTransport.
  * Supports multiple recipients of each type and method chaining.
  */
-export default class Message extends Base {
+export default class Message extends BaseClass {
   constructor() {
     super();
 

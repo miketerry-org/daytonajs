@@ -2,7 +2,7 @@
 
 "use strict";
 
-import logLevels from "./logLevels.js";
+import logLevels from "./log-levels.js";
 
 export default class Log {
   constructor() {

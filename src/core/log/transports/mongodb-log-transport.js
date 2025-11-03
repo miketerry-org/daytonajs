@@ -2,8 +2,8 @@
 
 "use strict";
 
-import LogTransport from "./logTransport.js";
-import logLevells from "./logLevels.js"; // assuming you use same levels as before
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
 
 let MongoClient = null;
 

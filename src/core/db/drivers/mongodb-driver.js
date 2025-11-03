@@ -2,11 +2,11 @@
 
 "use strict";
 
-import verify from "../foundation/verify.js";
-import Driver from "./driver.js";
-import Registry from "./registry.js";
+import verify from "../../utility/verify.js";
+import BaseDriver from "../../base/base-driver.js";
+import DriverRegistry from "../driver-registry.js";
 
-export default class MongoDBDriver extends Driver {
+export default class MongoDBDriver extends BaseDriver {
   constructor(config = {}) {
     super(config);
     this.db = null;
@@ -245,4 +245,4 @@ export default class MongoDBDriver extends Driver {
 }
 
 // register MongoDB database driver class
-Registry.add("mongodb", MongoDBDriver);
+DriverRegistry.add("mongodb", MongoDBDriver);

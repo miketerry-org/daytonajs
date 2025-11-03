@@ -2,8 +2,8 @@
 
 "use strict";
 
-import LogTransport from "./logTransport.js";
-import levels from "./logLevels.js";
+import LogTransport from "../log-transport.js";
+import logLevels from "../log-levels.js";
 
 let mysql = null;
 

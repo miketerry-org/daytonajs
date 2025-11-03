@@ -1,9 +1,9 @@
-// driverPostgrres:
+// postgres-driver.js:
 
 "use strict";
 
-import SQLDriver from "./driverSQL.js";
-import Registry from "./registry.js";
+import SQLDriver from "./sql-driver.js";
+import DriverRegistry from "../driver-registry.js";
 
 export default class PostgresDriver extends SQLDriver {
   constructor(config = {}) {
@@ -102,4 +102,4 @@ export default class PostgresDriver extends SQLDriver {
 }
 
 // register the postgres database driver
-Registry.add("postgres", PostgresDriver);
+DriverRegistry.add("postgres", PostgresDriver);

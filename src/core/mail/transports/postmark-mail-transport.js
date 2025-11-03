@@ -2,9 +2,9 @@
 
 "use strict";
 
-import MailTransport from "./mailTransport.js";
-import msg from "./msg.js";
-import { verify } from "milwaukee-foundation";
+import BaseMailTransport from "../../base/base-mail-transport.js";
+import msg from "../../utility/msg.js";
+import verify from "../../utility/verify.js";
 
 // Declare postmark package placeholder (lazy-loaded)
 let postmark;
@@ -15,7 +15,7 @@ let postmark;
  * @description
  * Sends messages via the Postmark API using the official SDK.
  */
-export default class PostmarkTransport extends MailTransport {
+export default class PostmarkTransport extends BaseMailTransport {
   /**
    * @param {Config} config - Must include postmark.api_key
    */
