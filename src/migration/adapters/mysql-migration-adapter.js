@@ -1,10 +1,10 @@
 // migrationAdapterMySQL.js
 "use strict";
 
-import MigrationAdapter from "./migrationAdapter.js";
+import BaseMigrationAdapter from "../../core/base/base-migration-adapter.js";
 import mysql from "mysql2/promise";
 
-export default class MigrationAdapterMySQL extends MigrationAdapter {
+export default class MySQLMigrationAdapter extends BaseMigrationAdapter {
   /**
    * @param {Object} config - MySQL connection config (host, user, password, database)
    */

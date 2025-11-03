@@ -1,11 +1,11 @@
-// migrationAdapterMongoDB.js
+// mongo-migration-adapter.js
 
 "use strict";
 
-import MigrationAdapter from "./migrationAdapter.js";
+import BaseMigrationAdapter from "../../core/base/base-migration-adapter.js";
 import { MongoClient } from "mongodb";
 
-export default class MigrationAdapterMongoDB extends MigrationAdapter {
+export default class MigrationAdapterMongoDB extends BaseMigrationAdapter {
   /**
    * @param {string} uri - MongoDB connection string
    * @param {string} dbName - Database name

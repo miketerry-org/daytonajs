@@ -1,11 +1,10 @@
-//
-
 "use strict";
 
-import MigrationAdapter from "./migrationAdapter.js";
-import { createClient } from "libsql";
+import BaseMigrationAdapter from "../../core/base/base-migration-adapter.js";
+import pkg from "libsql"; // CommonJS interop
+const { createClient } = pkg;
 
-export default class MigrationAdapterSQLite extends MigrationAdapter {
+export default class MigrationAdapterSQLite extends BaseMigrationAdapter {
   /**
    * @param {string} url - SQLite connection string for libsql
    */
@@ -14,6 +13,9 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
     this.client = createClient({ url });
   }
 
+  /**
+   * Ensure the migrations tracking table exists.
+   */
   async ensureMigrationTable() {
     await this.client.execute(`
       CREATE TABLE IF NOT EXISTS _migrations (
@@ -23,11 +25,17 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
     `);
   }
 
+  /**
+   * Fetch applied migration IDs.
+   */
   async fetchAppliedIds() {
     const res = await this.client.execute("SELECT id FROM _migrations");
     return res.rows.map(row => row.id);
   }
 
+  /**
+   * Record that a migration was applied.
+   */
   async recordAppliedMigration(id) {
     await this.client.execute(
       "INSERT INTO _migrations (id, applied_at) VALUES (?, CURRENT_TIMESTAMP)",
@@ -35,10 +43,16 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
     );
   }
 
+  /**
+   * Record that a migration was rolled back.
+   */
   async recordRolledBackMigration(id) {
     await this.client.execute("DELETE FROM _migrations WHERE id = ?", [id]);
   }
 
+  /**
+   * Execute an “up” operation.
+   */
   async executeOperation(operation) {
     const { tableName, columns, indexes } = operation.params;
 
@@ -54,9 +68,9 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
       return sql;
     });
 
-    const createTableSQL = `CREATE TABLE IF NOT EXISTS "${tableName}" (${columnDefs.join(
-      ", "
-    )})`;
+    const createTableSQL = `
+      CREATE TABLE IF NOT EXISTS "${tableName}" (${columnDefs.join(", ")})
+    `;
     await this.client.execute(createTableSQL);
 
     // Create indexes
@@ -71,6 +85,9 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
     }
   }
 
+  /**
+   * Revert a “down” operation.
+   */
   async revertOperation(operation) {
     const { tableName, indexes } = operation.params;
 
@@ -81,10 +98,13 @@ export default class MigrationAdapterSQLite extends MigrationAdapter {
       await this.client.execute(sql);
     }
 
-    // SQLite does not support dropping columns easily, so we won't handle column drops
+    // Note: dropping columns in SQLite requires table recreation, so not handled here
   }
 
+  /**
+   * Close the database connection.
+   */
   async close() {
-    if (this.client) await this.client.close();
+    if (this.client?.close) await this.client.close();
   }
 }

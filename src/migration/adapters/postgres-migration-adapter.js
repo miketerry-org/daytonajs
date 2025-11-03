@@ -2,11 +2,12 @@
 
 "use strict";
 
-import MigrationAdapter from "./migrationAdapter.js";
+import BaseMigrationAdapter from "../../core/base/base-migration-adapter.js";
 import pkg from "pg";
+
 const { Client } = pkg;
 
-export default class MigrationAdapterPostgres extends MigrationAdapter {
+export default class PostgresMigrationAdapter extends BaseMigrationAdapter {
   /**
    * @param {Object} config - PostgreSQL connection config (host, user, password, database, port)
    */
