@@ -1,13 +1,11 @@
 // base-model.js:
 
-"use strict";
-
 // -----------------------------------------------------------------------------
 // Imports
 // -----------------------------------------------------------------------------
 import BaseClass from "./base-class.js";
 import Schema from "../utility/schema.js";
-import pluralize from "pluralize"; // npm install pluralize
+import pluralize from "pluralize";
 
 // -----------------------------------------------------------------------------
 // Validation Error
@@ -25,17 +23,14 @@ export class ValidationError extends Error {
 }
 
 // -----------------------------------------------------------------------------
-// Base Model Class
+// Base Model Class (Hybrid ActiveRecord + Functional)
 // -----------------------------------------------------------------------------
 export default class BaseModel extends BaseClass {
   #name;
   #dbDriver;
   #schema;
+  #data = {}; // holds record state
 
-  /**
-   * @param {object} dbDriver - Database driver or DAO instance.
-   * @param {object} [config] - Optional configuration (passed to BaseClass).
-   */
   constructor(dbDriver, config = undefined) {
     super(config);
 
@@ -45,28 +40,18 @@ export default class BaseModel extends BaseClass {
 
     this.#dbDriver = dbDriver;
     this.#schema = new Schema();
-
-    // Logical name defaults to the class name without trailing "Model"
     this.#name = this.constructor.modelName;
 
-    // Let subclass define schema using the Schema instance directly
+    // Let subclass define schema
     this.defineSchema(this.#schema);
+
+    // Define reactive properties
+    this.#definePropertiesFromSchema();
   }
 
   // -------------------------------------------------------------------------
   // Abstract schema definition
   // -------------------------------------------------------------------------
-
-  /**
-   * Must be implemented by subclasses to define their schema.
-   * Example:
-   *   defineSchema(schema) {
-   *     schema
-   *       .addString("name", true)
-   *       .addEmail("email", true)
-   *       .addTimestamps();
-   *   }
-   */
   defineSchema(schema) {
     this.requireOverride("defineSchema");
   }
@@ -74,36 +59,19 @@ export default class BaseModel extends BaseClass {
   // -------------------------------------------------------------------------
   // 🧭 Static Name Helpers
   // -------------------------------------------------------------------------
-
-  /**
-   * Returns the logical (singular) model name.
-   * Example: "ServerConfigModel" → "ServerConfig"
-   */
   static get modelName() {
     const ctorName = this.name ?? "UnnamedModel";
     return ctorName.endsWith("Model") ? ctorName.slice(0, -5) : ctorName;
   }
 
-  /**
-   * Returns the database table/collection name.
-   * Example: "ServerConfigModel" → "server_configs"
-   */
   static get tableName() {
     const base = this.modelName;
-
-    // Convert PascalCase → snake_case
     const snake = base
       .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
       .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
       .toLowerCase();
-
-    // Use pluralize for proper pluralization (handles irregulars)
     return pluralize(snake);
   }
-
-  // -------------------------------------------------------------------------
-  // Accessors
-  // -------------------------------------------------------------------------
 
   get name() {
     return this.#name ?? this.constructor.modelName;
@@ -122,9 +90,124 @@ export default class BaseModel extends BaseClass {
   }
 
   // -------------------------------------------------------------------------
-  // Core CRUD Operations
+  // 🔧 Schema → Dynamic Properties
   // -------------------------------------------------------------------------
+  #definePropertiesFromSchema() {
+    const fields = this.#schema.getSchema();
+    for (const [key] of Object.entries(fields)) {
+      if (Object.hasOwn(this, key)) continue;
+      Object.defineProperty(this, key, {
+        enumerable: true,
+        configurable: true,
+        get: () => this.#data[key],
+        set: val => {
+          this.#data[key] = val;
+        },
+      });
+    }
+  }
 
+  #setData(record) {
+    this.#data = { ...record };
+  }
+
+  toObject() {
+    return { ...this.#data };
+  }
+
+  // Smart serialization for Express / JSON
+  toJSON() {
+    return this.toObject();
+  }
+
+  // -------------------------------------------------------------------------
+  // 🧩 Instance-Based Finders
+  // -------------------------------------------------------------------------
+  async findById(id, { mutate = false } = {}) {
+    const record = await this.dbDriver.findById(this.tableName, id);
+    if (!record) return null;
+
+    if (mutate) {
+      this.#setData(record);
+      return this;
+    }
+
+    const instance = new this.constructor(this.dbDriver);
+    instance.#setData(record);
+    return instance;
+  }
+
+  async findMany(criteria = {}, { asInstances = true } = {}) {
+    const results = await this.dbDriver.findMany(this.tableName, criteria);
+    if (!asInstances) return results;
+
+    return results.map(record => {
+      const instance = new this.constructor(this.dbDriver);
+      instance.#setData(record);
+      return instance;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 💾 ActiveRecord-Style CRUD
+  // -------------------------------------------------------------------------
+  async insert() {
+    return await this.#handleValidationAndExecute(
+      "insert",
+      this.#data,
+      async validated => {
+        const result = await this.dbDriver.insertOne(this.tableName, validated);
+        this.#setData({ ...validated, ...result });
+        return this.toObject();
+      }
+    );
+  }
+
+  async update() {
+    return await this.#handleValidationAndExecute(
+      "update",
+      this.#data,
+      async validated => {
+        const result = await this.dbDriver.updateOne(this.tableName, validated);
+        this.#setData({ ...validated, ...result });
+        return this.toObject();
+      },
+      { partial: true }
+    );
+  }
+
+  async upsert() {
+    return await this.#handleValidationAndExecute(
+      "upsert",
+      this.#data,
+      async validated => {
+        const result = await this.dbDriver.upsert(this.tableName, validated);
+        this.#setData({ ...validated, ...result });
+        return this.toObject();
+      }
+    );
+  }
+
+  async save() {
+    const pkField = this.#schema.getPrimaryKeyField?.() ?? "id";
+    if (this.#data[pkField]) return await this.update();
+    return await this.insert();
+  }
+
+  async delete() {
+    const pkField = this.#schema.getPrimaryKeyField?.() ?? "id";
+    const id = this.#data[pkField];
+    if (!id) throw new Error(`${this.name}.delete() requires a primary key`);
+
+    const result = await this.dbDriver.deleteOne(this.tableName, {
+      [pkField]: id,
+    });
+    return { ...this.toObject(), deleted: true, result };
+  }
+
+  // -------------------------------------------------------------------------
+  // 🧱 Stateless CRUD (for compatibility)
+  // -------------------------------------------------------------------------
   async insertOne(entity) {
     return await this.#handleValidationAndExecute(
       "insertOne",
@@ -142,42 +225,17 @@ export default class BaseModel extends BaseClass {
     );
   }
 
-  async upsert(entity) {
+  async upsertOne(entity) {
     return await this.#handleValidationAndExecute(
-      "upsert",
+      "upsertOne",
       entity,
       async validated => this.dbDriver.upsert(this.tableName, validated)
     );
   }
 
-  async deleteOne(entity) {
-    return await this.dbDriver.deleteOne(this.tableName, entity);
-  }
-
-  async deleteMany(entities) {
-    return await this.dbDriver.deleteMany(this.tableName, entities);
-  }
-
-  async deleteAll() {
-    return await this.dbDriver.deleteAll(this.tableName);
-  }
-
-  async findOne(criteria) {
-    return await this.dbDriver.findOne(this.tableName, criteria);
-  }
-
-  async findMany(criteria) {
-    return await this.dbDriver.findMany(this.tableName, criteria);
-  }
-
-  async findById(id) {
-    return await this.dbDriver.findById(this.tableName, id);
-  }
-
   // -------------------------------------------------------------------------
-  // Query & Utility
+  // 🔍 Query / Count / Transaction
   // -------------------------------------------------------------------------
-
   async count(criteria) {
     return await this.dbDriver.count(this.tableName, criteria);
   }
@@ -193,10 +251,6 @@ export default class BaseModel extends BaseClass {
   async query(rawQuery, options = {}) {
     return await this.dbDriver.query(rawQuery, options);
   }
-
-  // -------------------------------------------------------------------------
-  // Transaction Support
-  // -------------------------------------------------------------------------
 
   async transaction(callback) {
     return await this.dbDriver.transaction(callback);
@@ -215,17 +269,8 @@ export default class BaseModel extends BaseClass {
   }
 
   // -------------------------------------------------------------------------
-  // Schema Accessor
+  // ✅ Validation + Logging
   // -------------------------------------------------------------------------
-
-  getSchema() {
-    return this.schema.getSchema();
-  }
-
-  // -------------------------------------------------------------------------
-  // Validation
-  // -------------------------------------------------------------------------
-
   async #handleValidationAndExecute(method, entity, dbAction, options = {}) {
     const results = this.#validateEntity(entity, options);
     if (!results.valid) {
@@ -258,5 +303,20 @@ export default class BaseModel extends BaseClass {
       }
     }
     console.error("--------------------------------------------------\n");
+  }
+
+  // -------------------------------------------------------------------------
+  // 🌟 Static Serialization Helper
+  // -------------------------------------------------------------------------
+  static serialize(data) {
+    if (Array.isArray(data)) {
+      return data.map(item =>
+        item instanceof BaseModel ? item.toObject() : item
+      );
+    }
+    if (data instanceof BaseModel) {
+      return data.toObject();
+    }
+    return data;
   }
 }

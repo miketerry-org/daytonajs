@@ -6,9 +6,9 @@
 import BaseModel from "../../core/base/base-model.js";
 
 // -----------------------------------------------------------------------------
-// ServerModel
+// ServerConfigModel
 // -----------------------------------------------------------------------------
-export default class ServerModel extends BaseModel {
+export default class ServerConfigModel extends BaseModel {
   defineSchema(schema) {
     schema
       .addPrimary("id", { type: "auto" })
