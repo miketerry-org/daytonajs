@@ -92,7 +92,6 @@ export default class MongoDBDriver extends BaseDriver {
 
     this.client = new this.MongoClient(database_uri, {
       ignoreUndefined: true,
-      useUnifiedTopology: true,
     });
     await this.client.connect();
 

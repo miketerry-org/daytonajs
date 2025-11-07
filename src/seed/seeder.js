@@ -20,6 +20,10 @@ console.log("driver", driver);
 // instanciate server config model
 const model = new ServerConfigModel(driver);
 
+model.nodeId = 1;
+model.httpPort = 3000;
+console.log("model", model);
+
 async function mainLoop() {
   await driver.connect();
 
