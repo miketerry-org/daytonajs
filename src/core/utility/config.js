@@ -1,5 +1,5 @@
 // config.js:
-//
+
 "use strict";
 
 import fs from "fs";
@@ -15,6 +15,22 @@ const IV_LENGTH = 16; // AES block size
  * in multiple formats (ENV, JSON, TOML), or directly from a JavaScript object.
  */
 export default class Config {
+  static createFromEnvFile(filename, encryptKey = undefined) {
+    return new this().loadEnvFile(filename, encryptKey);
+  }
+
+  static createFromJSONFile(filename, encryptKey = undefined) {
+    return new this().loadJSONFile(filename, encryptKey);
+  }
+
+  static createFromTOMLfile(filename, encryptKey = undefined) {
+    return new this().loadTOMLFile(filename, encryptKey);
+  }
+
+  static createFromObject(values = {}, writable = false) {
+    return new this().loadObject(values, writable);
+  }
+
   /**
    * Optional validation hook.
    * Override this in subclasses to perform schema or type validation.
@@ -57,6 +73,7 @@ export default class Config {
       });
 
     this.validate(this);
+    return this;
   }
 
   /**
@@ -105,6 +122,7 @@ export default class Config {
     });
 
     this.validate(this);
+    return this;
   }
 
   /**
@@ -158,6 +176,7 @@ export default class Config {
     });
 
     this.validate(this);
+    return this;
   }
 
   /**
@@ -262,7 +281,6 @@ export default class Config {
     }
 
     this.validate(this);
-
     return this;
   }
 }

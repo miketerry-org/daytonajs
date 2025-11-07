@@ -1,9 +1,7 @@
-// src/core/utility/schema.js:
-
-"use strict";
+// schema.js:
 
 /**
- * DomainSchema
+ * Schema
  *
  * A lightweight, database-agnostic schema definition system for domain models.
  * Supports relational and document database targets through adapters.
@@ -11,13 +9,10 @@
  */
 export default class Schema {
   constructor() {
-    /**
-     * @private
-     * @type {{ fields: Record<string, object>, indexes: Array<object> }}
-     */
     this.definition = {
       fields: {},
       indexes: [],
+      primaryField: null,
     };
   }
 
@@ -30,10 +25,30 @@ export default class Schema {
    * @param {string} name - The field name.
    * @param {string} type - The field type (string, number, boolean, etc.).
    * @param {object} [options={}] - Additional field metadata and constraints.
-   * @returns {DomainSchema} This instance (chainable).
+   * @returns {Schema} This instance (chainable).
    */
   addField(name, type, options = {}) {
     this.definition.fields[name] = { type, ...options };
+    return this;
+  }
+
+  /**
+   * Define a primary key field (database agnostic).
+   * This is the logical unique identifier (e.g., "id").
+   * Each database driver will map this to its preferred column/field type.
+   *
+   * @param {string} name - Logical primary key name (default: "id").
+   * @param {string} [type="string"] - Data type of the field.
+   * @param {object} [options={}] - Additional field options.
+   */
+  addPrimary(name = "id", type = "string", options = {}) {
+    // Record this field
+    this.addField(name, type, { primary: true, required: true, ...options });
+    this.definition.primaryField = name;
+
+    // Create a unique index on it
+    this.addIndex(name, { unique: true, primary: true });
+
     return this;
   }
 
@@ -41,26 +56,10 @@ export default class Schema {
   // Type Helpers
   // -------------------------------------------------------------------------
 
-  /**
-   * Add a boolean field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false] - Whether the field is required.
-   * @param {boolean} [defaultValue] - Default value.
-   * @returns {DomainSchema}
-   */
   addBoolean(name, required = false, defaultValue) {
     return this.addField(name, "boolean", { required, defaultValue });
   }
 
-  /**
-   * Add a date field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {Date|string|number} [minValue]
-   * @param {Date|string|number} [maxValue]
-   * @param {Date|string|number} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addDate(name, required = false, minValue, maxValue, defaultValue) {
     return this.addField(name, "date", {
       required,
@@ -70,38 +69,14 @@ export default class Schema {
     });
   }
 
-  /**
-   * Add an email field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {string} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addEmail(name, required = false, defaultValue) {
     return this.addField(name, "email", { required, defaultValue });
   }
 
-  /**
-   * Add an enum field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {Array<string>} [values=[]] - Allowed values.
-   * @param {string} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addEnum(name, required = false, values = [], defaultValue) {
     return this.addField(name, "enum", { required, values, defaultValue });
   }
 
-  /**
-   * Add an integer field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {number} [minValue]
-   * @param {number} [maxValue]
-   * @param {number} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addInteger(name, required = false, minValue, maxValue, defaultValue) {
     return this.addField(name, "integer", {
       required,
@@ -111,15 +86,6 @@ export default class Schema {
     });
   }
 
-  /**
-   * Add a number (float) field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {number} [minValue]
-   * @param {number} [maxValue]
-   * @param {number} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addNumber(name, required = false, minValue, maxValue, defaultValue) {
     return this.addField(name, "number", {
       required,
@@ -129,26 +95,10 @@ export default class Schema {
     });
   }
 
-  /**
-   * Add a password field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {object} [options={}] - Options such as minLength or hashing strategy.
-   * @returns {DomainSchema}
-   */
   addPassword(name, required = false, options = {}) {
     return this.addField(name, "password", { required, ...options });
   }
 
-  /**
-   * Add a string field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {number} [minLength]
-   * @param {number} [maxLength]
-   * @param {string} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addString(name, required = false, minLength, maxLength, defaultValue) {
     return this.addField(name, "string", {
       required,
@@ -158,15 +108,6 @@ export default class Schema {
     });
   }
 
-  /**
-   * Add a time field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {Date|string|number} [minValue]
-   * @param {Date|string|number} [maxValue]
-   * @param {Date|string|number} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addTime(name, required = false, minValue, maxValue, defaultValue) {
     return this.addField(name, "time", {
       required,
@@ -176,15 +117,6 @@ export default class Schema {
     });
   }
 
-  /**
-   * Add a timestamp field.
-   * @param {string} name - Field name.
-   * @param {boolean} [required=false]
-   * @param {Date|string|number} [minValue]
-   * @param {Date|string|number} [maxValue]
-   * @param {Date|string|number} [defaultValue]
-   * @returns {DomainSchema}
-   */
   addTimestamp(name, required = false, minValue, maxValue, defaultValue) {
     return this.addField(name, "timestamp", {
       required,
@@ -194,24 +126,12 @@ export default class Schema {
     });
   }
 
-  /**
-   * Adds standard createdAt/updatedAt timestamp fields.
-   * @returns {DomainSchema}
-   */
   addTimestamps() {
     this.addTimestamp("createdAt", true);
     this.addTimestamp("updatedAt", true);
     return this;
   }
 
-  /**
-   * Add a custom field type with a user-defined handler.
-   * @param {string} name - Field name.
-   * @param {string} type - Custom type label.
-   * @param {object} [options={}] - Arbitrary options for the custom type.
-   * @param {function} [handler=null] - Optional validation or transformation function.
-   * @returns {DomainSchema}
-   */
   addCustom(name, type, options = {}, handler = null) {
     return this.addField(name, type, { ...options, handler });
   }
@@ -221,13 +141,20 @@ export default class Schema {
   // -------------------------------------------------------------------------
 
   /**
-   * Add an index definition.
-   * @param {string|string[]} fields - Field or fields to include in the index.
-   * @param {object} [options={}] - Index metadata (e.g. unique, sparse, name).
-   * @returns {DomainSchema}
+   * Add an index definition to the schema.
+   * @param {string | Array<{ name: string, order?: "asc" | "desc" }>} fields
+   * @param {object} [options={}]
    */
   addIndex(fields, options = {}) {
-    if (!Array.isArray(fields)) fields = [fields];
+    if (!Array.isArray(fields)) {
+      fields = [{ name: fields, order: "asc" }];
+    } else {
+      fields = fields.map(f =>
+        typeof f === "string"
+          ? { name: f, order: "asc" }
+          : { order: "asc", ...f }
+      );
+    }
     this.definition.indexes.push({ fields, ...options });
     return this;
   }
@@ -236,14 +163,6 @@ export default class Schema {
   // Validation
   // -------------------------------------------------------------------------
 
-  /**
-   * Validate an object against the schema definition.
-   * @param {object} data - The object to validate.
-   * @returns {{ valid: boolean, errors: string[], value: object }}
-   * - `valid`: true if all checks passed.
-   * - `errors`: list of validation error messages.
-   * - `value`: validated and default-applied result.
-   */
   validate(data) {
     const errors = [];
     const validated = {};
@@ -251,13 +170,13 @@ export default class Schema {
     for (const [name, rules] of Object.entries(this.definition.fields)) {
       const value = data[name];
 
-      // Required
+      // Required field check
       if (rules.required && (value === undefined || value === null)) {
         errors.push(`${name} is required`);
         continue;
       }
 
-      // Default value
+      // Default handling
       const finalValue =
         value !== undefined && value !== null
           ? value
@@ -273,18 +192,19 @@ export default class Schema {
         continue;
       }
 
-      // Length / range checks
+      // Length constraints
       if (rules.minLength && finalValue.length < rules.minLength)
         errors.push(`${name} must be at least ${rules.minLength} characters`);
       if (rules.maxLength && finalValue.length > rules.maxLength)
         errors.push(`${name} must be at most ${rules.maxLength} characters`);
 
+      // Numeric constraints
       if (rules.minValue !== undefined && finalValue < rules.minValue)
         errors.push(`${name} must be >= ${rules.minValue}`);
       if (rules.maxValue !== undefined && finalValue > rules.maxValue)
         errors.push(`${name} must be <= ${rules.maxValue}`);
 
-      // Enum
+      // Enum constraint
       if (rules.type === "enum" && !rules.values.includes(finalValue))
         errors.push(`${name} must be one of: ${rules.values.join(", ")}`);
 
@@ -313,16 +233,16 @@ export default class Schema {
   // Accessors
   // -------------------------------------------------------------------------
 
-  /**
-   * Get the raw schema definition object.
-   * @returns {{ fields: Record<string, object>, indexes: Array<object> }}
-   */
   getSchema() {
     return this.definition;
   }
 
+  getPrimaryField() {
+    return this.definition.primaryField;
+  }
+
   // -------------------------------------------------------------------------
-  // Internal Helpers (minimal comments)
+  // Internal Helpers
   // -------------------------------------------------------------------------
 
   #validateType(value, type) {

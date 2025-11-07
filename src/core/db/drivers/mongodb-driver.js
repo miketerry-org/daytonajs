@@ -1,43 +1,67 @@
-// driverMongoDB.js:
-
-"use strict";
+// mongodb-driver.js
 
 import verify from "../../utility/verify.js";
 import BaseDriver from "../../base/base-driver.js";
 import DriverRegistry from "../driver-registry.js";
 
+/**
+ * MongoDBDriver
+ * Implements the BaseDriver interface for MongoDB databases.
+ *
+ * Key goals:
+ * - Database-agnostic schema support (maps `_id` <-> `id`)
+ * - Consistent CRUD return signatures
+ * - Safe dynamic driver loading
+ * - Compatible with transactions (where supported)
+ */
 export default class MongoDBDriver extends BaseDriver {
   constructor(config = {}) {
-    super(config);
-    this.db = null;
+    // Initialize BaseDriver with empty config
+    super({});
+
     this.client = null;
+    this.db = null;
+    this.session = null;
     this.MongoClient = null;
     this.ObjectId = null;
-    this.uri = config.DATABASE_URI;
+
+    // Assign config via the BaseDriver setter
+    this.config = {
+      database_uri: config.database_uri,
+      database_name: config.database_name ?? null,
+    };
   }
 
-  async destructor() {
-    if (this.client) {
-      await this.client.close();
-      this.client = null;
-      this.db = null;
-    }
-  }
-  verifyConfig(config) {
-    return verify(this.config).isString("DATABASE_URI", true, 1, 255);
-  }
-
+  /* =============================================================
+   * Driver Identity
+   * ============================================================= */
   static driverName() {
     return "mongodb";
   }
 
-  verifyConfig() {
-    //!!mike must implement
+  /* =============================================================
+   * Config Verification
+   * ============================================================= */
+  verifyConfig(config) {
+    return verify(config)
+      .isString("database_uri", true, 5, 2048)
+      .isString("database_name", false, 1, 255);
   }
 
-  /**
-   * Lazily loads the `mongodb` package if not already loaded.
-   */
+  /* =============================================================
+   * Table / Collection Naming
+   * ============================================================= */
+  formatTableName(modelName) {
+    return BaseDriver.toSnakeCasePlural(modelName, false);
+  }
+
+  formatPrimaryKey(logicalKey = "id") {
+    return "_id";
+  }
+
+  /* =============================================================
+   * Dynamic Module Loader
+   * ============================================================= */
   async #loadDriver() {
     if (!this.MongoClient || !this.ObjectId) {
       try {
@@ -55,64 +79,119 @@ export default class MongoDBDriver extends BaseDriver {
   /* =============================================================
    * Connection Management
    * ============================================================= */
-
   async connect() {
-    // load the mongodb  module
     await this.#loadDriver();
 
-    // already connected
-    if (this.client) {
-      return;
+    if (this.client) return; // already connected
+    this.verifyConfig(this.config);
+
+    const { database_uri, database_name } = this.config;
+    if (!database_uri) {
+      throw new Error("MongoDBDriver.connect: `database_uri` is required.");
     }
 
-    this.client = new this.MongoClient(this.uri, { ignoreUndefined: true });
+    this.client = new this.MongoClient(database_uri, {
+      ignoreUndefined: true,
+      useUnifiedTopology: true,
+    });
     await this.client.connect();
-    this.db = this.client.db(this.dbName);
+
+    const dbName =
+      database_name ||
+      new URL(database_uri).pathname.replace(/^\//, "") ||
+      undefined;
+
+    this.db = this.client.db(dbName);
+    console.log(`[MongoDBDriver] Connected to database: ${dbName}`);
   }
 
-  async disconnect() {}
+  async disconnect() {
+    if (this.client) {
+      await this.client.close();
+      this.client = null;
+      this.db = null;
+      console.log("[MongoDBDriver] Disconnected.");
+    }
+  }
+
+  async destructor() {
+    await this.disconnect();
+  }
+
+  /* =============================================================
+   * Helpers
+   * ============================================================= */
+  normalizeEntity(entity) {
+    if (entity && entity._id && !entity.id) {
+      return { ...entity, id: entity._id.toString() };
+    }
+    return entity;
+  }
+
+  toObjectId(id) {
+    try {
+      return new this.ObjectId(id);
+    } catch {
+      return id;
+    }
+  }
 
   /* =============================================================
    * Create Operations
    * ============================================================= */
-
   async insertOne(target, entity) {
     const collection = this.db.collection(target);
-    const result = await collection.insertOne(entity);
-    return { ...entity, _id: result.insertedId };
+    const { id, ...rest } = entity;
+    const result = await collection.insertOne(rest);
+    return this.normalizeEntity({ ...rest, _id: result.insertedId });
   }
 
   async insertMany(target, entities) {
     const collection = this.db.collection(target);
     const result = await collection.insertMany(entities);
-    return result.insertedIds;
+    const inserted = Object.values(result.insertedIds).map((id, i) =>
+      this.normalizeEntity({ ...entities[i], _id: id })
+    );
+    return inserted;
   }
 
   /* =============================================================
    * Read Operations
    * ============================================================= */
-
   async findOne(target, criteria) {
     const collection = this.db.collection(target);
-    return await collection.findOne(criteria);
+    const query = { ...criteria };
+    if (query.id) {
+      query._id = this.toObjectId(query.id);
+      delete query.id;
+    }
+    const doc = await collection.findOne(query);
+    return this.normalizeEntity(doc);
   }
 
-  async findMany(target, criteria) {
+  async findMany(target, criteria = {}) {
     const collection = this.db.collection(target);
-    return await collection.find(criteria).toArray();
+    const query = { ...criteria };
+    if (query.id) {
+      query._id = this.toObjectId(query.id);
+      delete query.id;
+    }
+    const docs = await collection.find(query).toArray();
+    return docs.map(d => this.normalizeEntity(d));
   }
 
   async findById(target, id) {
     const collection = this.db.collection(target);
-    return await collection.findOne({ _id: new this.ObjectId(id) });
+    const doc = await collection.findOne({ _id: this.toObjectId(id) });
+    return this.normalizeEntity(doc);
   }
 
-  async count(target, criteria) {
+  async count(target, criteria = {}) {
     const collection = this.db.collection(target);
     return await collection.countDocuments(criteria);
   }
 
-  async exists(target, criteria) {
+  async exists(target, criteria = {}) {
     const collection = this.db.collection(target);
     const doc = await collection.findOne(criteria, { projection: { _id: 1 } });
     return !!doc;
@@ -121,71 +200,69 @@ export default class MongoDBDriver extends BaseDriver {
   /* =============================================================
    * Update Operations
    * ============================================================= */
-
   async updateOne(target, entity) {
     const collection = this.db.collection(target);
-    if (!entity._id) {
-      throw new Error("updateOne requires entity with an _id field.");
-    }
-    const { _id, ...updates } = entity;
+    const id = entity.id || entity._id;
+    if (!id)
+      throw new Error("updateOne requires an entity with `id` or `_id`.");
+
+    const { _id, id: omitId, ...updates } = entity;
     const result = await collection.updateOne(
-      { _id: new this.ObjectId(_id) },
+      { _id: this.toObjectId(id) },
       { $set: updates }
     );
-    return result.modifiedCount > 0;
+
+    return result.modifiedCount > 0
+      ? this.normalizeEntity(await this.findById(target, id))
+      : null;
   }
 
   async updateMany(target, entities) {
-    const collection = this.db.collection(target);
     const results = [];
-
     for (const entity of entities) {
-      if (!entity._id) continue;
-      const { _id, ...updates } = entity;
-      const result = await collection.updateOne(
-        { _id: new this.ObjectId(_id) },
-        { $set: updates }
-      );
-      results.push(result);
+      const updated = await this.updateOne(target, entity);
+      if (updated) results.push(updated);
     }
-
     return results;
   }
 
   async upsert(target, entity) {
     const collection = this.db.collection(target);
-    if (!entity._id) {
+    const id = entity.id || entity._id;
+
+    if (!id) {
       const result = await collection.insertOne(entity);
-      return { ...entity, _id: result.insertedId };
+      return this.normalizeEntity({ ...entity, _id: result.insertedId });
     }
 
-    const { _id, ...updates } = entity;
+    const { _id, id: omitId, ...updates } = entity;
     const result = await collection.updateOne(
-      { _id: new this.ObjectId(_id) },
+      { _id: this.toObjectId(id) },
       { $set: updates },
       { upsert: true }
     );
 
-    return result.upsertedId ? { ...entity, _id: result.upsertedId } : entity;
+    return result.upsertedId
+      ? this.normalizeEntity({ ...entity, _id: result.upsertedId })
+      : this.normalizeEntity(await this.findById(target, id));
   }
 
   /* =============================================================
    * Delete Operations
    * ============================================================= */
-
   async deleteOne(target, entity) {
     const collection = this.db.collection(target);
-    if (!entity._id)
-      throw new Error("deleteOne requires entity with an _id field.");
-    const result = await collection.deleteOne({
-      _id: new this.ObjectId(entity._id),
-    });
+    const id = entity.id || entity._id;
+    if (!id)
+      throw new Error("deleteOne requires an entity with `id` or `_id`.");
+
+    const result = await collection.deleteOne({ _id: this.toObjectId(id) });
     return result.deletedCount > 0;
   }
 
   async deleteMany(target, entities) {
     const collection = this.db.collection(target);
-    const ids = entities.map(e => new this.ObjectId(e._id));
+    const ids = entities.map(e => this.toObjectId(e.id || e._id));
     const result = await collection.deleteMany({ _id: { $in: ids } });
     return result.deletedCount;
   }
@@ -197,32 +274,31 @@ export default class MongoDBDriver extends BaseDriver {
   }
 
   /* =============================================================
-   * Advanced Operations
+   * Aggregate / Query
    * ============================================================= */
-
   async aggregate(target, pipelineOrCriteria) {
     const collection = this.db.collection(target);
     const pipeline = Array.isArray(pipelineOrCriteria)
       ? pipelineOrCriteria
       : [pipelineOrCriteria];
-    return await collection.aggregate(pipeline).toArray();
+    const docs = await collection.aggregate(pipeline).toArray();
+    return docs.map(d => this.normalizeEntity(d));
   }
 
-  async query(rawQuery, options = {}) {
-    if (typeof rawQuery !== "function") {
+  async query(callback, options = {}) {
+    if (typeof callback !== "function") {
       throw new Error(
-        "MongoDBDAO.query expects a function that receives the db instance."
+        "MongoDBDriver.query expects a function that receives the db instance."
       );
     }
-    return await rawQuery(this.db, options);
+    return await callback(this.db, options);
   }
 
   /* =============================================================
-   * Transaction Management
+   * Transactions
    * ============================================================= */
-
   async startTransaction() {
-    if (!this.client) throw new Error("Not connected to MongoDB.");
+    if (!this.client) throw new Error("MongoDB not connected.");
     this.session = this.client.startSession();
     this.session.startTransaction();
   }
@@ -244,5 +320,5 @@ export default class MongoDBDriver extends BaseDriver {
   }
 }
 
-// register MongoDB database driver class
+// Register driver globally
 DriverRegistry.add("mongodb", MongoDBDriver);

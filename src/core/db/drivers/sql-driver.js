@@ -1,6 +1,4 @@
-// driverSQL.js:
-
-"use strict";
+// sql-driver.js:
 
 import BaseDriver from "../../base/base-driver.js";
 
@@ -8,6 +6,35 @@ export default class SQLDriver extends BaseDriver {
   constructor(config = {}) {
     super(config);
     this.db = null; // concrete subclass must initialize this
+  }
+
+  /* =============================================================
+   * Table / Column Formatting
+   * ============================================================= */
+
+  /**
+   * SQL convention: UPPERCASE_SNAKE_CASE_PLURAL
+   * e.g. ServerConfigModel → SERVER_CONFIGS
+   */
+  formatTableName(modelName) {
+    return BaseDriver.toSnakeCasePlural(modelName, true);
+  }
+
+  /**
+   * SQL primary key field name convention.
+   * Most SQL databases use "id" (auto-increment or UUID).
+   * Subclasses can override if needed (e.g., Postgres UUID id).
+   */
+  formatPrimaryKey(logicalKey = "id") {
+    return logicalKey;
+  }
+
+  /**
+   * SQL doesn’t need to rename keys when converting entities,
+   * but we define this for consistency with document databases.
+   */
+  transformEntityPrimaryKey(entity, schema, toDatabase = true) {
+    return entity;
   }
 
   /* =============================================================
@@ -43,6 +70,12 @@ export default class SQLDriver extends BaseDriver {
   async findMany(table, criteria) {
     const { sql, params } = this.buildWhereClause(table, criteria, 1);
     return await this.execute(sql, params);
+  }
+
+  async findById(table, id, idField = "id") {
+    const sql = `SELECT * FROM "${table}" WHERE "${idField}"=$1 LIMIT 1`;
+    const rows = await this.execute(sql, [id]);
+    return rows[0] || null;
   }
 
   async count(table, criteria) {
@@ -151,7 +184,7 @@ export default class SQLDriver extends BaseDriver {
     return { sql, params };
   }
 
-  // Subclasses must implement this to execute SQL with parameters
+  // Abstract: Subclasses must implement this
   async execute(sql, params = []) {
     throw new Error("Subclasses must implement execute(sql, params)");
   }

@@ -1,258 +1,262 @@
-// domainModel.js
+// base-model.js:
+
 "use strict";
 
-/**
- * DomainModel
- * -------------------------------------------------------------------------
- * A domain-level model that wraps a schema and a DAO implementation.
- * It provides validated CRUD operations and domain-centric access
- * to persistence functionality.
- */
-export default class BaseModel {
-  /**
-   * @param {string} name - Logical name of the model (e.g. "User", "Order").
-   * @param {DomainSchema} schema - Associated DomainSchema instance.
-   * @param {DAO} dao - DAO instance responsible for persistence.
-   */
-  constructor(name, schema, dao) {
-    if (!name) {
-      throw new Error("DomainModel requires a name");
-    }
-    if (!schema) {
-      throw new Error("DomainModel requires a schema");
-    }
-    if (!dao) {
-      throw new Error("DomainModel requires a DAO");
-    }
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+import BaseClass from "./base-class.js";
+import Schema from "../utility/schema.js";
+import pluralize from "pluralize"; // npm install pluralize
 
-    /** @readonly */
-    this.name = name;
-
-    /** @readonly */
-    this.schema = schema;
-
-    /** @readonly */
-    this.dao = dao;
-  }
-
-  // -------------------------------------------------------------------------
-  // Core CRUD Operations
-  // -------------------------------------------------------------------------
-
-  /**
-   * Inserts a single entity after schema validation.
-   * @param {object} entity - The entity to insert.
-   * @returns {Promise<object>} The persisted entity.
-   */
-  async insertOne(entity) {
-    const validated = this.#validateEntity(entity);
-    return await this.dao.insertOne(this.name, validated);
-  }
-
-  /**
-   * Inserts multiple entities.
-   * @param {object[]} entities - Array of entities to insert.
-   * @returns {Promise<object[]>} Persisted entities.
-   */
-  async insertMany(entities) {
-    const validated = entities.map(e => this.#validateEntity(e));
-    return await this.dao.insertMany(this.name, validated);
-  }
-
-  /**
-   * Finds a single entity matching given criteria.
-   * @param {object} criteria - Query filter.
-   * @returns {Promise<object|null>} Matching entity or null.
-   */
-  async findOne(criteria) {
-    return await this.dao.findOne(this.name, criteria);
-  }
-
-  /**
-   * Finds multiple entities matching given criteria.
-   * @param {object} criteria - Query filter.
-   * @returns {Promise<object[]>} Matching entities.
-   */
-  async findMany(criteria) {
-    return await this.dao.findMany(this.name, criteria);
-  }
-
-  /**
-   * Finds an entity by ID.
-   * @param {string|number} id - Entity identifier.
-   * @returns {Promise<object|null>} Entity or null if not found.
-   */
-  async findById(id) {
-    return await this.dao.findById(this.name, id);
-  }
-
-  /**
-   * Updates a single entity.
-   * @param {object} entity - Entity to update.
-   * @returns {Promise<object>} Updated entity.
-   */
-  async updateOne(entity) {
-    const validated = this.#validateEntity(entity, { partial: true });
-    return await this.dao.updateOne(this.name, validated);
-  }
-
-  /**
-   * Updates multiple entities.
-   * @param {object[]} entities - Entities to update.
-   * @returns {Promise<object[]>} Updated entities.
-   */
-  async updateMany(entities) {
-    const validated = entities.map(e =>
-      this.#validateEntity(e, { partial: true })
+// -----------------------------------------------------------------------------
+// Validation Error
+// -----------------------------------------------------------------------------
+export class ValidationError extends Error {
+  constructor(model, method, errors = []) {
+    super(
+      `${model}.${method}() failed validation with ${errors.length} error(s).`
     );
-    return await this.dao.updateMany(this.name, validated);
+    this.name = "ValidationError";
+    this.model = model;
+    this.method = method;
+    this.errors = errors;
   }
+}
+
+// -----------------------------------------------------------------------------
+// Base Model Class
+// -----------------------------------------------------------------------------
+export default class BaseModel extends BaseClass {
+  #name;
+  #dbDriver;
+  #schema;
 
   /**
-   * Inserts or updates (upserts) a single entity.
-   * @param {object} entity - Entity to upsert.
-   * @returns {Promise<object>} Upserted entity.
+   * @param {object} dbDriver - Database driver or DAO instance.
+   * @param {object} [config] - Optional configuration (passed to BaseClass).
    */
-  async upsert(entity) {
-    const validated = this.#validateEntity(entity);
-    return await this.dao.upsert(this.name, validated);
-  }
+  constructor(dbDriver, config = undefined) {
+    super(config);
 
-  /**
-   * Deletes a single entity.
-   * @param {object} entity - Entity to delete.
-   * @returns {Promise<void>}
-   */
-  async deleteOne(entity) {
-    return await this.dao.deleteOne(this.name, entity);
-  }
+    if (!dbDriver) {
+      throw new Error(`Model requires a database driver`);
+    }
 
-  /**
-   * Deletes multiple entities.
-   * @param {object[]} entities - Entities to delete.
-   * @returns {Promise<void>}
-   */
-  async deleteMany(entities) {
-    return await this.dao.deleteMany(this.name, entities);
-  }
+    this.#dbDriver = dbDriver;
+    this.#schema = new Schema();
 
-  /**
-   * Deletes all entities (truncate/clear).
-   * @returns {Promise<void>}
-   */
-  async deleteAll() {
-    return await this.dao.deleteAll(this.name);
+    // Logical name defaults to the class name without trailing "Model"
+    this.#name = this.constructor.modelName;
+
+    // Let subclass define schema using the Schema instance directly
+    this.defineSchema(this.#schema);
   }
 
   // -------------------------------------------------------------------------
-  // Query & Utility
+  // Abstract schema definition
   // -------------------------------------------------------------------------
 
   /**
-   * Counts entities matching given criteria.
-   * @param {object} criteria - Query filter.
-   * @returns {Promise<number>}
+   * Must be implemented by subclasses to define their schema.
+   * Example:
+   *   defineSchema(schema) {
+   *     schema
+   *       .addString("name", true)
+   *       .addEmail("email", true)
+   *       .addTimestamps();
+   *   }
    */
-  async count(criteria) {
-    return await this.dao.count(this.name, criteria);
-  }
-
-  /**
-   * Checks whether any entity exists matching the given criteria.
-   * @param {object} criteria - Query filter.
-   * @returns {Promise<boolean>}
-   */
-  async exists(criteria) {
-    return await this.dao.exists(this.name, criteria);
-  }
-
-  /**
-   * Executes an aggregation or pipeline operation.
-   * @param {any} pipelineOrCriteria - Aggregation or query.
-   * @returns {Promise<any>}
-   */
-  async aggregate(pipelineOrCriteria) {
-    return await this.dao.aggregate(this.name, pipelineOrCriteria);
-  }
-
-  /**
-   * Executes a raw query directly through the DAO.
-   * @param {string|object} rawQuery - Raw query.
-   * @param {object} [options] - Optional execution options.
-   * @returns {Promise<any>}
-   */
-  async query(rawQuery, options = {}) {
-    return await this.dao.query(rawQuery, options);
+  defineSchema(schema) {
+    this.requireOverride("defineSchema");
   }
 
   // -------------------------------------------------------------------------
-  // Transaction Support (proxied to DAO)
+  // 🧭 Static Name Helpers
   // -------------------------------------------------------------------------
 
   /**
-   * Runs a function within a transaction.
-   * @param {Function} callback - Operation to run.
-   * @returns {Promise<void>}
+   * Returns the logical (singular) model name.
+   * Example: "ServerConfigModel" → "ServerConfig"
    */
-  async transaction(callback) {
-    return await this.dao.transaction(callback);
+  static get modelName() {
+    const ctorName = this.name ?? "UnnamedModel";
+    return ctorName.endsWith("Model") ? ctorName.slice(0, -5) : ctorName;
   }
 
   /**
-   * Begins a transaction.
-   * @returns {Promise<void>}
+   * Returns the database table/collection name.
+   * Example: "ServerConfigModel" → "server_configs"
    */
-  async startTransaction() {
-    return await this.dao.startTransaction();
-  }
+  static get tableName() {
+    const base = this.modelName;
 
-  /**
-   * Commits the active transaction.
-   * @returns {Promise<void>}
-   */
-  async commitTransaction() {
-    return await this.dao.commitTransaction();
-  }
+    // Convert PascalCase → snake_case
+    const snake = base
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+      .toLowerCase();
 
-  /**
-   * Rolls back the active transaction.
-   * @returns {Promise<void>}
-   */
-  async rollbackTransaction() {
-    return await this.dao.rollbackTransaction();
+    // Use pluralize for proper pluralization (handles irregulars)
+    return pluralize(snake);
   }
 
   // -------------------------------------------------------------------------
   // Accessors
   // -------------------------------------------------------------------------
 
-  /**
-   * Returns the model's schema definition.
-   * @returns {{ fields: Record<string, object>, indexes: Array<object> }}
-   */
+  get name() {
+    return this.#name ?? this.constructor.modelName;
+  }
+
+  get tableName() {
+    return this.constructor.tableName;
+  }
+
+  get schema() {
+    return this.#schema;
+  }
+
+  get dbDriver() {
+    return this.#dbDriver;
+  }
+
+  // -------------------------------------------------------------------------
+  // Core CRUD Operations
+  // -------------------------------------------------------------------------
+
+  async insertOne(entity) {
+    return await this.#handleValidationAndExecute(
+      "insertOne",
+      entity,
+      async validated => this.dbDriver.insertOne(this.tableName, validated)
+    );
+  }
+
+  async updateOne(entity) {
+    return await this.#handleValidationAndExecute(
+      "updateOne",
+      entity,
+      async validated => this.dbDriver.updateOne(this.tableName, validated),
+      { partial: true }
+    );
+  }
+
+  async upsert(entity) {
+    return await this.#handleValidationAndExecute(
+      "upsert",
+      entity,
+      async validated => this.dbDriver.upsert(this.tableName, validated)
+    );
+  }
+
+  async deleteOne(entity) {
+    return await this.dbDriver.deleteOne(this.tableName, entity);
+  }
+
+  async deleteMany(entities) {
+    return await this.dbDriver.deleteMany(this.tableName, entities);
+  }
+
+  async deleteAll() {
+    return await this.dbDriver.deleteAll(this.tableName);
+  }
+
+  async findOne(criteria) {
+    return await this.dbDriver.findOne(this.tableName, criteria);
+  }
+
+  async findMany(criteria) {
+    return await this.dbDriver.findMany(this.tableName, criteria);
+  }
+
+  async findById(id) {
+    return await this.dbDriver.findById(this.tableName, id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Query & Utility
+  // -------------------------------------------------------------------------
+
+  async count(criteria) {
+    return await this.dbDriver.count(this.tableName, criteria);
+  }
+
+  async exists(criteria) {
+    return await this.dbDriver.exists(this.tableName, criteria);
+  }
+
+  async aggregate(pipelineOrCriteria) {
+    return await this.dbDriver.aggregate(this.tableName, pipelineOrCriteria);
+  }
+
+  async query(rawQuery, options = {}) {
+    return await this.dbDriver.query(rawQuery, options);
+  }
+
+  // -------------------------------------------------------------------------
+  // Transaction Support
+  // -------------------------------------------------------------------------
+
+  async transaction(callback) {
+    return await this.dbDriver.transaction(callback);
+  }
+
+  async startTransaction() {
+    return await this.dbDriver.startTransaction();
+  }
+
+  async commitTransaction() {
+    return await this.dbDriver.commitTransaction();
+  }
+
+  async rollbackTransaction() {
+    return await this.dbDriver.rollbackTransaction();
+  }
+
+  // -------------------------------------------------------------------------
+  // Schema Accessor
+  // -------------------------------------------------------------------------
+
   getSchema() {
     return this.schema.getSchema();
   }
 
-  /**
-   * Returns the DAO backing this model.
-   * @returns {DAO}
-   */
-  getDAO() {
-    return this.dao;
+  // -------------------------------------------------------------------------
+  // Validation
+  // -------------------------------------------------------------------------
+
+  async #handleValidationAndExecute(method, entity, dbAction, options = {}) {
+    const results = this.#validateEntity(entity, options);
+    if (!results.valid) {
+      this.#logValidationErrors(method, results.errors);
+      throw new ValidationError(this.name, method, results.errors);
+    }
+    return await dbAction(results.value);
   }
 
-  // -------------------------------------------------------------------------
-  // Internal helpers (minimally commented)
-  // -------------------------------------------------------------------------
   #validateEntity(entity, options = {}) {
-    const result = this.schema.validate(entity, options);
-    if (!result.valid) {
-      const msg = `Validation failed for model "${
-        this.name
-      }":\n${result.errors.join("\n")}`;
-      throw new Error(msg);
+    return this.schema.validate(entity, options);
+  }
+
+  #logValidationErrors(method, errors = []) {
+    if (!errors?.length) return;
+    console.error(`\n⚠️ Validation failed in ${this.name}.${method}():`);
+    console.error("--------------------------------------------------");
+    for (const err of errors) {
+      if (typeof err === "string") {
+        console.error(`• ${err}`);
+      } else if (err && typeof err === "object") {
+        const { field, message, expected, received } = err;
+        console.error(
+          `• Field: ${field ?? "?"} → ${message ?? "Invalid"} (expected: ${
+            expected ?? "?"
+          }, got: ${received ?? "?"})`
+        );
+      } else {
+        console.error(`• ${String(err)}`);
+      }
     }
-    return result.value;
+    console.error("--------------------------------------------------\n");
   }
 }

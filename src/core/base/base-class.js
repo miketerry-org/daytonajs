@@ -22,8 +22,7 @@ export default class BaseClass {
    * @throws {Error} If instantiated directly or invalid config is supplied.
    */
   constructor(config = undefined) {
-    // Prevent direct use of Base
-    if (new.target === Base) {
+    if (new.target === BaseClass) {
       throw new Error(msg.abstractClass);
     }
 
