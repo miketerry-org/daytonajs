@@ -15,21 +15,15 @@ import DriverRegistry from "../driver-registry.js";
  * - Compatible with transactions (where supported)
  */
 export default class MongoDBDriver extends BaseDriver {
-  constructor(config = {}) {
-    // Initialize BaseDriver with empty config
-    super({});
+  constructor(config) {
+    super(config);
+    console.log(this.constructor.name);
 
     this.client = null;
     this.db = null;
     this.session = null;
     this.MongoClient = null;
     this.ObjectId = null;
-
-    // Assign config via the BaseDriver setter
-    this.config = {
-      database_uri: config.database_uri,
-      database_name: config.database_name ?? null,
-    };
   }
 
   /* =============================================================
@@ -43,9 +37,15 @@ export default class MongoDBDriver extends BaseDriver {
    * Config Verification
    * ============================================================= */
   verifyConfig(config) {
-    return verify(config)
+    console.log("type", typeof verify);
+    let results = verify(config)
       .isString("database_uri", true, 5, 2048)
       .isString("database_name", false, 1, 255);
+
+    console.log("a", results);
+    console.log("b", results.ok);
+    console.log("c", results.errors);
+    return results;
   }
 
   /* =============================================================

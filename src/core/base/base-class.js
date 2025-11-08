@@ -1,6 +1,4 @@
-// src/core/base/index.js:
-//
-"use strict";
+// base-class.js:
 
 import Config from "../utility/config.js";
 import msg from "../utility/msg.js";
@@ -21,20 +19,24 @@ export default class BaseClass {
    * @param {Config} [config] - Optional configuration instance.
    * @throws {Error} If instantiated directly or invalid config is supplied.
    */
-  constructor(config = undefined) {
+  constructor(config) {
+    // prevent an instance of BaseClass  from being instanciated
     if (new.target === BaseClass) {
       throw new Error(msg.abstractClass);
     }
 
     // If config is provided, ensure it’s a valid instance
-    if (config !== undefined && !(config instanceof Config)) {
+    const ok = config !== undefined && !(config instanceof Config);
+    if (!ok) {
       throw new TypeError(msg.invalidConfigParam);
     }
 
     // Only verify configuration if a valid one is provided
-    if (config instanceof Config) {
+    if (ok) {
+      console.log("instance of config");
       // use virtual method to verify configuration values
       const results = this.verifyConfig(config);
+      console.log("results.ok", results.ok);
 
       // if one or more errors then join them before throwing a  new error
       if (results && results.errors.length > 0) {

@@ -8,29 +8,9 @@ import BaseClass from "./base-class.js";
  * Handles common config management and utilities.
  */
 export default class BaseDriver extends BaseClass {
-  #config = {};
-
-  constructor(config = {}) {
-    super(); // call BaseClass constructor
-    this.config = config; // use setter to initialize
-  }
-
-  /**
-   * Getter for the driver configuration
-   */
-  get config() {
-    return this.#config;
-  }
-
-  /**
-   * Setter for the driver configuration
-   * Allows safe assignment from subclasses
-   */
-  set config(value) {
-    if (typeof value !== "object" || value === null) {
-      throw new TypeError("BaseDriver: config must be a non-null object");
-    }
-    this.#config = value;
+  constructor(config) {
+    super(config);
+    console.log(this.constructor.name);
   }
 
   /* =============================================================

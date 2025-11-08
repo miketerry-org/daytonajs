@@ -47,6 +47,44 @@ export default class BaseModel extends BaseClass {
 
     // Define reactive properties
     this.#definePropertiesFromSchema();
+
+    // Proxy enforcement of schema
+    const validFields = new Set(Object.keys(this.#schema.getSchema()));
+    const self = this;
+
+    return new Proxy(this, {
+      set(target, prop, value) {
+        if (validFields.has(prop) || Reflect.has(target, prop)) {
+          target[prop] = value;
+          return true;
+        }
+
+        throw new Error(
+          `❌ Invalid property assignment '${String(prop)}' on model '${
+            self.name
+          }'. ` + `Valid fields are: ${Array.from(validFields).join(", ")}`
+        );
+      },
+
+      get(target, prop, receiver) {
+        if (Reflect.has(target, prop)) {
+          return Reflect.get(target, prop, receiver);
+        }
+
+        if (typeof prop === "string" && !validFields.has(prop)) {
+          throw new Error(
+            `❌ Invalid property access '${prop}' on model '${self.name}'. ` +
+              `Valid fields are: ${Array.from(validFields).join(", ")}`
+          );
+        }
+
+        return undefined;
+      },
+
+      has(target, prop) {
+        return Reflect.has(target, prop) || validFields.has(prop);
+      },
+    });
   }
 
   // -------------------------------------------------------------------------
