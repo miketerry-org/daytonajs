@@ -25,29 +25,29 @@ export default class BaseClass {
       throw new Error(msg.abstractClass);
     }
 
-    // If config is provided, ensure it’s a valid instance
-    const ok = config !== undefined && !(config instanceof Config);
-    if (!ok) {
+    // exit if no config passed
+    if (typeof config === "undefined") {
+      this.#config = undefined;
+      return;
+    }
+
+    // throw error if config is not an object or class instance
+    if (typeof config !== "object") {
       throw new TypeError(msg.invalidConfigParam);
     }
 
-    // Only verify configuration if a valid one is provided
-    if (ok) {
-      // use virtual method to verify configuration values
-      const results = this.verifyConfig(config);
+    // use virtual method to verify configuration values
+    const results = this.verifyConfig(config);
 
-      // if one or more errors then join them before throwing a  new error
-      if (results && results.errors.length > 0) {
-        throw new Error(
-          `Config Verification error: (${results.errors.join(", ")})`
-        );
-      }
-
-      this.#config = config;
-    } else {
-      // No config — still allow object to exist without restrictions
-      this.#config = undefined;
+    // if one or more errors then join them before throwing a  new error
+    if (results && results.errors.length > 0) {
+      throw new Error(
+        `Config Verification error: (${results.errors.join(", ")})`
+      );
     }
+
+    // if we get here the  remember config
+    this.#config = config;
   }
 
   /**
