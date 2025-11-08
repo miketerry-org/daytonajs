@@ -1,18 +1,13 @@
-// server-config-model.js
+// server-config-model.js:
 
-// -----------------------------------------------------------------------------
-// Imports
-// -----------------------------------------------------------------------------
 import BaseModel from "../../core/base/base-model.js";
 
-// -----------------------------------------------------------------------------
-// ServerConfigModel
-// -----------------------------------------------------------------------------
 export default class ServerConfigModel extends BaseModel {
   defineSchema(schema) {
     schema
       .addPrimary("id", { type: "auto" })
-      .addInteger("node_id", true, 1, 10000)
+      .addInteger("node_id", true, 1, 10000);
+    /*      
       .addInteger("http_port", true, 1, 65000, 80)
       .addString("db_uri", true, 1, 255)
       .addString("log_name", true, 1, 255)
@@ -30,7 +25,7 @@ export default class ServerConfigModel extends BaseModel {
       .addString("views_layouts_path", true, 1, 255)
       .addString("views_partials_path", true, 1, 255)
       .addString("emails_templates_path", true, 1, 255)
-      // Index on node_id
       .addIndex("node_id", { unique: true });
+      */
   }
 }

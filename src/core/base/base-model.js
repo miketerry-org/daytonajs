@@ -1,6 +1,6 @@
-// base-model.js
+// base-model.js:
 
-// --------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Imports
 // -----------------------------------------------------------------------------
 import BaseClass from "./base-class.js";
@@ -23,25 +23,25 @@ export class ValidationError extends Error {
 }
 
 // -----------------------------------------------------------------------------
-// Base Model Class (Hybrid ActiveRecord + Functional)
+// Base Model
 // -----------------------------------------------------------------------------
 export default class BaseModel extends BaseClass {
-  #name;
-  #driver;
-  #schema;
-  #data = {}; // holds record state
+  _driver;
+  _schema;
+  _data = {};
+  _name;
 
   constructor(driver, config = undefined) {
     super(config);
 
-    // ensure a driver was passed
     if (!driver || typeof driver !== "object") {
       throw new Error(
         `❌ Model requires a valid database driver instance (got ${typeof driver}).`
       );
     }
 
-    const requiredMethods = [
+    // Verify driver supports required DB methods
+    const required = [
       "findById",
       "findMany",
       "insertOne",
@@ -54,10 +54,7 @@ export default class BaseModel extends BaseClass {
       "query",
     ];
 
-    const missing = requiredMethods.filter(
-      method => typeof driver[method] !== "function"
-    );
-
+    const missing = required.filter(m => typeof driver[m] !== "function");
     if (missing.length > 0) {
       throw new Error(
         `❌ Invalid driver instance passed to ${
@@ -66,65 +63,27 @@ export default class BaseModel extends BaseClass {
       );
     }
 
-    this.#driver = driver;
-    this.#schema = new Schema();
-    this.#name = this.constructor.modelName;
+    this._driver = driver;
+    this._schema = new Schema();
+    this._name = this.constructor.modelName;
 
-    // Let subclass define schema
-    this.defineSchema(this.#schema);
+    // Subclass must define schema
+    this.defineSchema(this._schema);
 
-    // Define reactive properties based on schema
-    this.#definePropertiesFromSchema();
-
-    // Proxy schema-safe access and assignment
-    const validFields = new Set(Object.keys(this.#schema.getSchema()));
-    const self = this;
-
-    return new Proxy(this, {
-      set(target, prop, value) {
-        if (validFields.has(prop) || Reflect.has(target, prop)) {
-          target[prop] = value;
-          return true;
-        }
-
-        throw new Error(
-          `❌ Invalid property assignment '${String(prop)}' on model '${
-            self.name
-          }'. ` + `Valid fields are: ${Array.from(validFields).join(", ")}`
-        );
-      },
-
-      get(target, prop, receiver) {
-        if (Reflect.has(target, prop)) {
-          return Reflect.get(target, prop, receiver);
-        }
-
-        if (typeof prop === "string" && !validFields.has(prop)) {
-          throw new Error(
-            `❌ Invalid property access '${prop}' on model '${self.name}'. ` +
-              `Valid fields are: ${Array.from(validFields).join(", ")}`
-          );
-        }
-
-        return undefined;
-      },
-
-      has(target, prop) {
-        return Reflect.has(target, prop) || validFields.has(prop);
-      },
-    });
+    // Define dynamic getters/setters for schema fields
+    this._definePropertiesFromSchema();
   }
 
-  // -------------------------------------------------------------------------
-  // Abstract schema definition
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // To be overridden by subclasses
+  // ---------------------------------------------------------------------------
   defineSchema(schema) {
     this.requireOverride("defineSchema");
   }
 
-  // -------------------------------------------------------------------------
-  // 🧭 Static Name Helpers
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Static helpers
+  // ---------------------------------------------------------------------------
   static get modelName() {
     const ctorName = this.name ?? "UnnamedModel";
     return ctorName.endsWith("Model") ? ctorName.slice(0, -5) : ctorName;
@@ -139,67 +98,77 @@ export default class BaseModel extends BaseClass {
     return pluralize(snake);
   }
 
+  // ---------------------------------------------------------------------------
+  // Public getters
+  // ---------------------------------------------------------------------------
   get name() {
-    return this.#name ?? this.constructor.modelName;
+    return this._name;
   }
-
   get tableName() {
     return this.constructor.tableName;
   }
-
   get schema() {
-    return this.#schema;
+    return this._schema;
   }
-
   get driver() {
-    return this.#driver;
+    return this._driver;
+  }
+  get data() {
+    return { ...this._data };
   }
 
-  // -------------------------------------------------------------------------
-  // 🔧 Schema → Dynamic Properties
-  // -------------------------------------------------------------------------
-  #definePropertiesFromSchema() {
-    const fields = this.#schema.getSchema();
-    for (const [key] of Object.entries(fields)) {
-      if (Object.hasOwn(this, key)) continue;
+  // ---------------------------------------------------------------------------
+  // Define reactive schema properties (public)
+  // ---------------------------------------------------------------------------
+  _definePropertiesFromSchema() {
+    const schemaFields = this._schema.getSchema?.();
+    if (!schemaFields || typeof schemaFields !== "object") {
+      console.warn(`⚠️ No schema fields defined for model: ${this._name}`);
+      return;
+    }
+
+    // Always define dynamic getters/setters for schema fields
+    for (const key of Object.keys(schemaFields)) {
       Object.defineProperty(this, key, {
         enumerable: true,
         configurable: true,
-        get: () => this.#data[key],
+        get: () => this._data[key],
         set: val => {
-          this.#data[key] = val;
+          this._data[key] = val;
         },
       });
     }
   }
 
-  #setData(record) {
-    this.#data = { ...record };
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
+  _setData(record) {
+    this._data = { ...record };
   }
 
   toObject() {
-    return { ...this.#data };
+    return { ...this._data };
   }
-
-  // Smart serialization for Express / JSON
   toJSON() {
     return this.toObject();
   }
 
-  // -------------------------------------------------------------------------
-  // 🧩 Instance-Based Finders
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // CRUD Operations
+  // ---------------------------------------------------------------------------
+
   async findById(id, { mutate = false } = {}) {
     const record = await this.driver.findById(this.tableName, id);
     if (!record) return null;
 
     if (mutate) {
-      this.#setData(record);
+      this._setData(record);
       return this;
     }
 
     const instance = new this.constructor(this.driver);
-    instance.#setData(record);
+    instance._setData(record);
     return instance;
   }
 
@@ -209,33 +178,33 @@ export default class BaseModel extends BaseClass {
 
     return results.map(record => {
       const instance = new this.constructor(this.driver);
-      instance.#setData(record);
+      instance._setData(record);
       return instance;
     });
   }
 
-  // -------------------------------------------------------------------------
-  // 💾 ActiveRecord-Style CRUD
-  // -------------------------------------------------------------------------
   async insert() {
-    return await this.#handleValidationAndExecute(
-      "insert",
-      this.#data,
-      async validated => {
-        const result = await this.driver.insertOne(this.tableName, validated);
-        this.#setData({ ...validated, ...result });
-        return this.toObject();
-      }
+    const results = this._schema.validate(this._data);
+    if (!results.valid) {
+      this._logValidationErrors("insert", results.errors);
+      throw new ValidationError(this.name, "insert", results.errors);
+    }
+
+    const inserted = await this._driver.insertOne(
+      this.tableName,
+      results.value
     );
+    this._setData({ ...results.value, ...inserted });
+    return this.toObject();
   }
 
   async update() {
-    return await this.#handleValidationAndExecute(
+    return await this._handleValidationAndExecute(
       "update",
-      this.#data,
+      this._data,
       async validated => {
-        const result = await this.driver.updateOne(this.tableName, validated);
-        this.#setData({ ...validated, ...result });
+        const result = await this._driver.updateOne(this.tableName, validated);
+        this._setData({ ...validated, ...result });
         return this.toObject();
       },
       { partial: true }
@@ -243,65 +212,32 @@ export default class BaseModel extends BaseClass {
   }
 
   async upsert() {
-    return await this.#handleValidationAndExecute(
+    return await this._handleValidationAndExecute(
       "upsert",
-      this.#data,
+      this._data,
       async validated => {
-        const result = await this.driver.upsert(this.tableName, validated);
-        this.#setData({ ...validated, ...result });
+        const result = await this._driver.upsert(this.tableName, validated);
+        this._setData({ ...validated, ...result });
         return this.toObject();
       }
     );
   }
 
   async save() {
-    const pkField = this.#schema.getPrimaryKeyField?.() ?? "id";
-    if (this.#data[pkField]) return await this.update();
-    return await this.insert();
+    const pk = this._schema.getPrimaryKeyField?.() ?? "id";
+    if (this._data[pk]) return this.update();
+    return this.insert();
   }
 
   async delete() {
-    const pkField = this.#schema.getPrimaryKeyField?.() ?? "id";
-    const id = this.#data[pkField];
+    const pk = this._schema.getPrimaryKeyField?.() ?? "id";
+    const id = this._data[pk];
     if (!id) throw new Error(`${this.name}.delete() requires a primary key`);
 
-    const result = await this.driver.deleteOne(this.tableName, {
-      [pkField]: id,
-    });
+    const result = await this.driver.deleteOne(this.tableName, { [pk]: id });
     return { ...this.toObject(), deleted: true, result };
   }
 
-  // -------------------------------------------------------------------------
-  // 🧱 Stateless CRUD (for functional usage)
-  // -------------------------------------------------------------------------
-  async insertOne(entity) {
-    return await this.#handleValidationAndExecute(
-      "insertOne",
-      entity,
-      async validated => this.driver.insertOne(this.tableName, validated)
-    );
-  }
-
-  async updateOne(entity) {
-    return await this.#handleValidationAndExecute(
-      "updateOne",
-      entity,
-      async validated => this.driver.updateOne(this.tableName, validated),
-      { partial: true }
-    );
-  }
-
-  async upsertOne(entity) {
-    return await this.#handleValidationAndExecute(
-      "upsertOne",
-      entity,
-      async validated => this.driver.upsert(this.tableName, validated)
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // 🔍 Query / Count / Transaction
-  // -------------------------------------------------------------------------
   async count(criteria) {
     return await this.driver.count(this.tableName, criteria);
   }
@@ -310,14 +246,17 @@ export default class BaseModel extends BaseClass {
     return await this.driver.exists(this.tableName, criteria);
   }
 
-  async aggregate(pipelineOrCriteria) {
-    return await this.driver.aggregate(this.tableName, pipelineOrCriteria);
+  async aggregate(pipeline) {
+    return await this.driver.aggregate(this.tableName, pipeline);
   }
 
   async query(rawQuery, options = {}) {
     return await this.driver.query(rawQuery, options);
   }
 
+  // ---------------------------------------------------------------------------
+  // Transactions
+  // ---------------------------------------------------------------------------
   async transaction(callback) {
     return await this.driver.transaction(callback);
   }
@@ -334,55 +273,44 @@ export default class BaseModel extends BaseClass {
     return await this.driver.rollbackTransaction();
   }
 
-  // -------------------------------------------------------------------------
-  // ✅ Validation + Logging
-  // -------------------------------------------------------------------------
-  async #handleValidationAndExecute(method, entity, dbAction, options = {}) {
-    const results = this.#validateEntity(entity, options);
+  // ---------------------------------------------------------------------------
+  // Validation + Logging
+  // ---------------------------------------------------------------------------
+  async _handleValidationAndExecute(method, entity, dbAction, options = {}) {
+    const results = this._schema.validate(entity, options);
     if (!results.valid) {
-      this.#logValidationErrors(method, results.errors);
+      this._logValidationErrors(method, results.errors);
       throw new ValidationError(this.name, method, results.errors);
     }
     return await dbAction(results.value);
   }
 
-  #validateEntity(entity, options = {}) {
-    return this.schema.validate(entity, options);
-  }
-
-  #logValidationErrors(method, errors = []) {
+  _logValidationErrors(method, errors = []) {
     if (!errors?.length) return;
     console.error(`\n⚠️ Validation failed in ${this.name}.${method}():`);
-    console.error("--------------------------------------------------");
     for (const err of errors) {
       if (typeof err === "string") {
         console.error(`• ${err}`);
       } else if (err && typeof err === "object") {
-        const { field, message, expected, received } = err;
         console.error(
-          `• Field: ${field ?? "?"} → ${message ?? "Invalid"} (expected: ${
-            expected ?? "?"
-          }, got: ${received ?? "?"})`
+          `• Field: ${err.field ?? "?"} → ${err.message ?? "Invalid"}`
         );
       } else {
         console.error(`• ${String(err)}`);
       }
     }
-    console.error("--------------------------------------------------\n");
+    console.error();
   }
 
-  // -------------------------------------------------------------------------
-  // 🌟 Static Serialization Helper
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Static serialization helper
+  // ---------------------------------------------------------------------------
   static serialize(data) {
-    if (Array.isArray(data)) {
+    if (Array.isArray(data))
       return data.map(item =>
         item instanceof BaseModel ? item.toObject() : item
       );
-    }
-    if (data instanceof BaseModel) {
-      return data.toObject();
-    }
+    if (data instanceof BaseModel) return data.toObject();
     return data;
   }
 }

@@ -1,61 +1,37 @@
-// schema.js:
-
 /**
  * Schema
  *
  * A lightweight, database-agnostic schema definition system for domain models.
- * Supports relational and document database targets through adapters.
- * Provides validation, indexing, and type-safe field declarations.
+ * Supports validation, indexing, and typed field declarations.
  */
 export default class Schema {
   constructor() {
     this.definition = {
-      fields: {},
-      indexes: [],
-      primaryField: null,
+      fields: {}, // Field name → config
+      indexes: [], // Index definitions
+      primaryField: null, // Primary key field name
     };
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Core Schema Definition
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Add a field to the schema.
-   * @param {string} name - The field name.
-   * @param {string} type - The field type (string, number, boolean, etc.).
-   * @param {object} [options={}] - Additional field metadata and constraints.
-   * @returns {Schema} This instance (chainable).
-   */
   addField(name, type, options = {}) {
     this.definition.fields[name] = { type, ...options };
     return this;
   }
 
-  /**
-   * Define a primary key field (database agnostic).
-   * This is the logical unique identifier (e.g., "id").
-   * Each database driver will map this to its preferred column/field type.
-   *
-   * @param {string} name - Logical primary key name (default: "id").
-   * @param {string} [type="string"] - Data type of the field.
-   * @param {object} [options={}] - Additional field options.
-   */
   addPrimary(name = "id", type = "string", options = {}) {
-    // Record this field
     this.addField(name, type, { primary: true, required: true, ...options });
     this.definition.primaryField = name;
-
-    // Create a unique index on it
     this.addIndex(name, { unique: true, primary: true });
-
     return this;
   }
 
-  // -------------------------------------------------------------------------
-  // Type Helpers
-  // -------------------------------------------------------------------------
-
+  // ---------------------------------------------------------------------------
+  // Typed Helpers
+  // ---------------------------------------------------------------------------
   addBoolean(name, required = false, defaultValue) {
     return this.addField(name, "boolean", { required, defaultValue });
   }
@@ -127,8 +103,8 @@ export default class Schema {
   }
 
   addTimestamps() {
-    this.addTimestamp("createdAt", true);
-    this.addTimestamp("updatedAt", true);
+    this.addTimestamp("createdAt", false);
+    this.addTimestamp("updatedAt", false);
     return this;
   }
 
@@ -136,39 +112,39 @@ export default class Schema {
     return this.addField(name, type, { ...options, handler });
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Indexing
-  // -------------------------------------------------------------------------
-
-  /**
-   * Add an index definition to the schema.
-   * @param {string | Array<{ name: string, order?: "asc" | "desc" }>} fields
-   * @param {object} [options={}]
-   */
+  // ---------------------------------------------------------------------------
   addIndex(fields, options = {}) {
-    if (!Array.isArray(fields)) {
-      fields = [{ name: fields, order: "asc" }];
-    } else {
-      fields = fields.map(f =>
-        typeof f === "string"
-          ? { name: f, order: "asc" }
-          : { order: "asc", ...f }
-      );
-    }
-    this.definition.indexes.push({ fields, ...options });
+    const normalized = Array.isArray(fields)
+      ? fields.map(f =>
+          typeof f === "string"
+            ? { name: f, order: "asc" }
+            : { order: "asc", ...f }
+        )
+      : [{ name: fields, order: "asc" }];
+
+    this.definition.indexes.push({ fields: normalized, ...options });
     return this;
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Validation
-  // -------------------------------------------------------------------------
-
-  validate(data) {
+  // ---------------------------------------------------------------------------
+  validate(data = {}) {
     const errors = [];
     const validated = {};
 
     for (const [name, rules] of Object.entries(this.definition.fields)) {
-      const value = data[name];
+      let value = data[name];
+
+      // Apply default value if not provided
+      if (value === undefined && rules.defaultValue !== undefined) {
+        value =
+          typeof rules.defaultValue === "function"
+            ? rules.defaultValue()
+            : rules.defaultValue;
+      }
 
       // Required field check
       if (rules.required && (value === undefined || value === null)) {
@@ -176,41 +152,36 @@ export default class Schema {
         continue;
       }
 
-      // Default handling
-      const finalValue =
-        value !== undefined && value !== null
-          ? value
-          : rules.defaultValue !== undefined
-          ? rules.defaultValue
-          : undefined;
+      if (value === undefined || value === null) continue;
 
-      if (finalValue === undefined) continue;
+      // Basic normalization
+      value = this.#normalizeValue(value, rules.type);
 
       // Type validation
-      if (!this.#validateType(finalValue, rules.type)) {
+      if (!this.#validateType(value, rules.type)) {
         errors.push(`${name} must be of type ${rules.type}`);
         continue;
       }
 
-      // Length constraints
-      if (rules.minLength && finalValue.length < rules.minLength)
+      // Length validation
+      if (rules.minLength && value.length < rules.minLength)
         errors.push(`${name} must be at least ${rules.minLength} characters`);
-      if (rules.maxLength && finalValue.length > rules.maxLength)
+      if (rules.maxLength && value.length > rules.maxLength)
         errors.push(`${name} must be at most ${rules.maxLength} characters`);
 
-      // Numeric constraints
-      if (rules.minValue !== undefined && finalValue < rules.minValue)
+      // Numeric bounds
+      if (rules.minValue !== undefined && value < rules.minValue)
         errors.push(`${name} must be >= ${rules.minValue}`);
-      if (rules.maxValue !== undefined && finalValue > rules.maxValue)
+      if (rules.maxValue !== undefined && value > rules.maxValue)
         errors.push(`${name} must be <= ${rules.maxValue}`);
 
       // Enum constraint
-      if (rules.type === "enum" && !rules.values.includes(finalValue))
+      if (rules.type === "enum" && !rules.values.includes(value))
         errors.push(`${name} must be one of: ${rules.values.join(", ")}`);
 
-      // Custom handler
+      // Custom validation
       if (typeof rules.handler === "function") {
-        const result = rules.handler(finalValue, data);
+        const result = rules.handler(value, data);
         if (result !== true)
           errors.push(
             typeof result === "string"
@@ -219,7 +190,7 @@ export default class Schema {
           );
       }
 
-      validated[name] = finalValue;
+      validated[name] = value;
     }
 
     return {
@@ -229,22 +200,34 @@ export default class Schema {
     };
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Accessors
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
+  /**
+   * Return only field definitions (used by BaseModel).
+   */
   getSchema() {
+    return this.definition.fields;
+  }
+
+  /**
+   * Return the full schema definition.
+   */
+  getDefinition() {
     return this.definition;
   }
 
-  getPrimaryField() {
+  /**
+   * Return the name of the primary key field.
+   */
+  getPrimaryKeyField() {
     return this.definition.primaryField;
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Internal Helpers
-  // -------------------------------------------------------------------------
-
+  // ---------------------------------------------------------------------------
   #validateType(value, type) {
     switch (type) {
       case "string":
@@ -257,13 +240,34 @@ export default class Schema {
       case "integer":
         return Number.isInteger(value);
       case "number":
-        return typeof value === "number";
+        return typeof value === "number" && !isNaN(value);
       case "date":
       case "time":
       case "timestamp":
         return value instanceof Date || !isNaN(Date.parse(value));
       default:
         return true;
+    }
+  }
+
+  #normalizeValue(value, type) {
+    switch (type) {
+      case "string":
+      case "email":
+      case "password":
+      case "enum":
+        return String(value).trim();
+      case "integer":
+        return parseInt(value, 10);
+      case "number":
+        return parseFloat(value);
+      case "boolean":
+        return value === "true" || value === true || value === 1;
+      case "date":
+      case "timestamp":
+        return value instanceof Date ? value : new Date(value);
+      default:
+        return value;
     }
   }
 }
