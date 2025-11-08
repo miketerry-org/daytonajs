@@ -1,6 +1,19 @@
+import fs from "fs";
+import path from "path";
+import * as TOML from "@iarna/toml";
 import Config from "../core/utility/Config.js";
 import Mongodriver from "../core/db/drivers/mongodb-driver.js";
 import ServerConfigModel from "../feature/server-config/server-config-model.js";
+
+const filename = path.resolve("src/seed/configs.toml");
+// console.log("filename", filename);
+
+const buffer = fs.readFileSync(filename, "utf8");
+// console.log(buffer);
+
+const data = TOML.parse(buffer);
+console.log("data", data);
+process.exit(0);
 
 async function mainloop() {
   const database_uri = "mongodb://localhost:27017/test";

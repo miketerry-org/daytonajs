@@ -9,7 +9,7 @@ export default class ServerConfigModel extends BaseModel {
       .addInteger("node_id", true, 1, 10000);
     /*      
       .addInteger("http_port", true, 1, 65000, 80)
-      .addString("db_uri", true, 1, 255)
+      .addString("database_uri", true, 1, 255)
       .addString("log_name", true, 1, 255)
       .addInteger("log_expiration_days", true, 1, 365)
       .addBoolean("log_capped", true, false)
