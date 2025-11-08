@@ -17,7 +17,6 @@ import DriverRegistry from "../driver-registry.js";
 export default class MongoDBDriver extends BaseDriver {
   constructor(config) {
     super(config);
-    console.log(this.constructor.name);
 
     this.client = null;
     this.db = null;
@@ -37,15 +36,9 @@ export default class MongoDBDriver extends BaseDriver {
    * Config Verification
    * ============================================================= */
   verifyConfig(config) {
-    console.log("type", typeof verify);
-    let results = verify(config)
+    return verify(config)
       .isString("database_uri", true, 5, 2048)
       .isString("database_name", false, 1, 255);
-
-    console.log("a", results);
-    console.log("b", results.ok);
-    console.log("c", results.errors);
-    return results;
   }
 
   /* =============================================================
@@ -101,7 +94,6 @@ export default class MongoDBDriver extends BaseDriver {
       undefined;
 
     this.db = this.client.db(dbName);
-    console.log(`[MongoDBDriver] Connected to database: ${dbName}`);
   }
 
   async disconnect() {
@@ -109,7 +101,6 @@ export default class MongoDBDriver extends BaseDriver {
       await this.client.close();
       this.client = null;
       this.db = null;
-      console.log("[MongoDBDriver] Disconnected.");
     }
   }
 

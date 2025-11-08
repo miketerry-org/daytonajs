@@ -33,10 +33,8 @@ export default class BaseClass {
 
     // Only verify configuration if a valid one is provided
     if (ok) {
-      console.log("instance of config");
       // use virtual method to verify configuration values
       const results = this.verifyConfig(config);
-      console.log("results.ok", results.ok);
 
       // if one or more errors then join them before throwing a  new error
       if (results && results.errors.length > 0) {

@@ -8,11 +8,6 @@ import BaseClass from "./base-class.js";
  * Handles common config management and utilities.
  */
 export default class BaseDriver extends BaseClass {
-  constructor(config) {
-    super(config);
-    console.log(this.constructor.name);
-  }
-
   /* =============================================================
    * Table / Collection Naming
    * ============================================================= */
