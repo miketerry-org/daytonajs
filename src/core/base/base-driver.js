@@ -1,36 +1,105 @@
+// -----------------------------------------------------------------------------
 // base-driver.js
+// -----------------------------------------------------------------------------
 
-import BaseClass from "./base-class.js";
-
-/**
- * BaseDriver
- * Abstract class that all database drivers should extend.
- * Handles common config management and utilities.
- */
-export default class BaseDriver extends BaseClass {
-  /* =============================================================
-   * Table / Collection Naming
-   * ============================================================= */
-  static toSnakeCasePlural(name, capitalize = false) {
-    if (!name) return "";
-    const snake = name
-      .replace(/([a-z])([A-Z])/g, "$1_$2")
-      .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
-      .toLowerCase();
-
-    const plural = snake.endsWith("s") ? snake : snake + "s";
-
-    if (capitalize) {
-      return plural.charAt(0).toUpperCase() + plural.slice(1);
-    }
-    return plural;
+export default class BaseDriver {
+  constructor(config = {}) {
+    this._config = config;
   }
 
-  formatTableName(modelName) {
-    return BaseDriver.toSnakeCasePlural(modelName, false);
+  // ---------------------------------------------------------------------------
+  // Connection
+  // ---------------------------------------------------------------------------
+  async connect() {
+    throw new Error("connect() not implemented in BaseDriver");
   }
 
-  formatPrimaryKey(logicalKey = "id") {
-    return logicalKey;
+  async disconnect() {
+    throw new Error("disconnect() not implemented in BaseDriver");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collection / Table access
+  // ---------------------------------------------------------------------------
+  collection(name) {
+    throw new Error("collection() not implemented in BaseDriver");
+  }
+
+  // ---------------------------------------------------------------------------
+  // CRUD operations
+  // ---------------------------------------------------------------------------
+  async findById(table, id) {
+    throw new Error("findById() not implemented in BaseDriver");
+  }
+
+  async findMany(table, criteria = {}) {
+    throw new Error("findMany() not implemented in BaseDriver");
+  }
+
+  async insertOne(table, document) {
+    throw new Error("insertOne() not implemented in BaseDriver");
+  }
+
+  async insertMany(table, documents) {
+    throw new Error("insertMany() not implemented in BaseDriver");
+  }
+
+  async updateOne(table, document) {
+    throw new Error("updateOne() not implemented in BaseDriver");
+  }
+
+  async updateMany(table, documents) {
+    throw new Error("updateMany() not implemented in BaseDriver");
+  }
+
+  async upsert(table, document) {
+    throw new Error("upsert() not implemented in BaseDriver");
+  }
+
+  async upsertMany(table, documents) {
+    throw new Error("upsertMany() not implemented in BaseDriver");
+  }
+
+  async deleteOne(table, criteria) {
+    throw new Error("deleteOne() not implemented in BaseDriver");
+  }
+
+  async deleteMany(table, criteria) {
+    throw new Error("deleteMany() not implemented in BaseDriver");
+  }
+
+  async count(table, criteria = {}) {
+    throw new Error("count() not implemented in BaseDriver");
+  }
+
+  async exists(table, criteria = {}) {
+    throw new Error("exists() not implemented in BaseDriver");
+  }
+
+  async aggregate(table, pipeline = []) {
+    throw new Error("aggregate() not implemented in BaseDriver");
+  }
+
+  async query(rawQuery, options = {}) {
+    throw new Error("query() not implemented in BaseDriver");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transactions
+  // ---------------------------------------------------------------------------
+  async startTransaction() {
+    throw new Error("startTransaction() not implemented in BaseDriver");
+  }
+
+  async commitTransaction(session) {
+    throw new Error("commitTransaction() not implemented in BaseDriver");
+  }
+
+  async rollbackTransaction(session) {
+    throw new Error("rollbackTransaction() not implemented in BaseDriver");
+  }
+
+  async transaction(callback) {
+    throw new Error("transaction() not implemented in BaseDriver");
   }
 }

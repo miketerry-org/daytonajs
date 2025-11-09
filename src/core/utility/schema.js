@@ -225,6 +225,23 @@ export default class Schema {
     return this.definition.primaryField;
   }
 
+  /**
+   * Return normalized index definitions for driver consumption.
+   * Each entry:
+   *  { fields: {field1: 1, field2: -1}, options: { unique: true/false, primary: true/false } }
+   */
+  getIndexes() {
+    return this.definition.indexes.map(idx => {
+      const fields = {};
+      idx.fields.forEach(f => {
+        fields[f.name] = f.order === "desc" ? -1 : 1;
+      });
+      const options = { unique: !!idx.unique };
+      if (idx.primary) options.primary = true;
+      return { fields, options };
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------

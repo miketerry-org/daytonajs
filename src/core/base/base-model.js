@@ -1,6 +1,7 @@
-// base-model.js:
-
 // -----------------------------------------------------------------------------
+// base-model.js
+// -----------------------------------------------------------------------------
+
 // Imports
 // -----------------------------------------------------------------------------
 import BaseClass from "./base-class.js";
@@ -40,18 +41,26 @@ export default class BaseModel extends BaseClass {
       );
     }
 
-    // Verify driver supports required DB methods
+    // Verify driver supports all required DB methods (including batch)
     const required = [
       "findById",
       "findMany",
       "insertOne",
+      "insertMany",
       "updateOne",
+      "updateMany",
       "upsert",
+      "upsertMany",
       "deleteOne",
+      "deleteMany",
       "count",
       "exists",
       "aggregate",
       "query",
+      "transaction",
+      "startTransaction",
+      "commitTransaction",
+      "rollbackTransaction",
     ];
 
     const missing = required.filter(m => typeof driver[m] !== "function");
@@ -70,7 +79,7 @@ export default class BaseModel extends BaseClass {
     // Subclass must define schema
     this.defineSchema(this._schema);
 
-    // Define dynamic getters/setters for schema fields
+    // Define reactive schema properties
     this._definePropertiesFromSchema();
   }
 
@@ -118,7 +127,7 @@ export default class BaseModel extends BaseClass {
   }
 
   // ---------------------------------------------------------------------------
-  // Define reactive schema properties (public)
+  // Define reactive schema properties
   // ---------------------------------------------------------------------------
   _definePropertiesFromSchema() {
     const schemaFields = this._schema.getSchema?.();
@@ -127,8 +136,8 @@ export default class BaseModel extends BaseClass {
       return;
     }
 
-    // Always define dynamic getters/setters for schema fields
     for (const key of Object.keys(schemaFields)) {
+      if (Object.getOwnPropertyDescriptor(this, key)) continue;
       Object.defineProperty(this, key, {
         enumerable: true,
         configurable: true,
@@ -150,14 +159,14 @@ export default class BaseModel extends BaseClass {
   toObject() {
     return { ...this._data };
   }
+
   toJSON() {
     return this.toObject();
   }
 
   // ---------------------------------------------------------------------------
-  // CRUD Operations
+  // Single-record CRUD Operations
   // ---------------------------------------------------------------------------
-
   async findById(id, { mutate = false } = {}) {
     const record = await this.driver.findById(this.tableName, id);
     if (!record) return null;
@@ -190,20 +199,22 @@ export default class BaseModel extends BaseClass {
       throw new ValidationError(this.name, "insert", results.errors);
     }
 
-    const inserted = await this._driver.insertOne(
-      this.tableName,
-      results.value
-    );
+    const inserted = await this.driver.insertOne(this.tableName, results.value);
     this._setData({ ...results.value, ...inserted });
     return this.toObject();
   }
 
+  async insertOne(data) {
+    this._setData(data);
+    return this.insert();
+  }
+
   async update() {
-    return await this._handleValidationAndExecute(
+    return this._handleValidationAndExecute(
       "update",
       this._data,
       async validated => {
-        const result = await this._driver.updateOne(this.tableName, validated);
+        const result = await this.driver.updateOne(this.tableName, validated);
         this._setData({ ...validated, ...result });
         return this.toObject();
       },
@@ -211,22 +222,63 @@ export default class BaseModel extends BaseClass {
     );
   }
 
+  async updateOne(data) {
+    this._setData(data);
+    return this.update();
+  }
+
   async upsert() {
-    return await this._handleValidationAndExecute(
+    return this._handleValidationAndExecute(
       "upsert",
       this._data,
       async validated => {
-        const result = await this._driver.upsert(this.tableName, validated);
+        const result = await this.driver.upsert(this.tableName, validated);
         this._setData({ ...validated, ...result });
         return this.toObject();
       }
     );
   }
 
-  async save() {
-    const pk = this._schema.getPrimaryKeyField?.() ?? "id";
-    if (this._data[pk]) return this.update();
-    return this.insert();
+  // ---------------------------------------------------------------------------
+  // Batch CRUD Operations (reuse single-record methods)
+  // ---------------------------------------------------------------------------
+  async insertMany(records) {
+    if (!Array.isArray(records) || !records.length) {
+      return [];
+    }
+    const results = [];
+    for (const record of records) {
+      const instance = new this.constructor(this.driver);
+      instance._setData(record);
+      results.push(await instance.insert());
+    }
+    return results;
+  }
+
+  async updateMany(records) {
+    if (!Array.isArray(records) || !records.length) {
+      return [];
+    }
+    const results = [];
+    for (const record of records) {
+      const instance = new this.constructor(this.driver);
+      instance._setData(record);
+      results.push(await instance.update());
+    }
+    return results;
+  }
+
+  async upsertMany(records) {
+    if (!Array.isArray(records) || !records.length) {
+      return [];
+    }
+    const results = [];
+    for (const record of records) {
+      const instance = new this.constructor(this.driver);
+      instance._setData(record);
+      results.push(await instance.upsert());
+    }
+    return results;
   }
 
   async delete() {
@@ -238,39 +290,71 @@ export default class BaseModel extends BaseClass {
     return { ...this.toObject(), deleted: true, result };
   }
 
-  async count(criteria) {
-    return await this.driver.count(this.tableName, criteria);
+  async deleteMany(records) {
+    if (!Array.isArray(records) || !records.length) {
+      return [];
+    }
+    const results = [];
+    const pk = this._schema.getPrimaryKeyField?.() ?? "id";
+
+    for (const record of records) {
+      const instance = new this.constructor(this.driver);
+      instance._setData(record);
+      if (!instance._data[pk]) {
+        throw new Error(
+          `${this.name}.deleteMany() requires each record to have primary key '${pk}'`
+        );
+      }
+      results.push(await instance.delete());
+    }
+
+    return results;
   }
 
-  async exists(criteria) {
-    return await this.driver.exists(this.tableName, criteria);
+  // ---------------------------------------------------------------------------
+  // Aggregate / Query helpers
+  // ---------------------------------------------------------------------------
+  count(criteria) {
+    return this.driver.count(this.tableName, criteria);
   }
 
-  async aggregate(pipeline) {
-    return await this.driver.aggregate(this.tableName, pipeline);
+  exists(criteria) {
+    return this.driver.exists(this.tableName, criteria);
   }
 
-  async query(rawQuery, options = {}) {
-    return await this.driver.query(rawQuery, options);
+  aggregate(pipeline) {
+    return this.driver.aggregate(this.tableName, pipeline);
+  }
+
+  query(rawQuery, options = {}) {
+    return this.driver.query(rawQuery, options);
   }
 
   // ---------------------------------------------------------------------------
   // Transactions
   // ---------------------------------------------------------------------------
-  async transaction(callback) {
-    return await this.driver.transaction(callback);
+  startTransaction() {
+    return this.driver.startTransaction();
   }
 
-  async startTransaction() {
-    return await this.driver.startTransaction();
+  commitTransaction(session) {
+    return this.driver.commitTransaction(session);
   }
 
-  async commitTransaction() {
-    return await this.driver.commitTransaction();
+  rollbackTransaction(session) {
+    return this.driver.rollbackTransaction(session);
   }
 
-  async rollbackTransaction() {
-    return await this.driver.rollbackTransaction();
+  transaction(callback) {
+    return this.driver.transaction(callback);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Save (insert or update)
+  // ---------------------------------------------------------------------------
+  async save() {
+    const pk = this._schema.getPrimaryKeyField?.() ?? "id";
+    return this._data[pk] ? this.update() : this.insert();
   }
 
   // ---------------------------------------------------------------------------
@@ -282,16 +366,15 @@ export default class BaseModel extends BaseClass {
       this._logValidationErrors(method, results.errors);
       throw new ValidationError(this.name, method, results.errors);
     }
-    return await dbAction(results.value);
+    return dbAction(results.value);
   }
 
   _logValidationErrors(method, errors = []) {
     if (!errors?.length) return;
     console.error(`\n⚠️ Validation failed in ${this.name}.${method}():`);
     for (const err of errors) {
-      if (typeof err === "string") {
-        console.error(`• ${err}`);
-      } else if (err && typeof err === "object") {
+      if (typeof err === "string") console.error(`• ${err}`);
+      else if (err && typeof err === "object") {
         console.error(
           `• Field: ${err.field ?? "?"} → ${err.message ?? "Invalid"}`
         );
@@ -312,5 +395,14 @@ export default class BaseModel extends BaseClass {
       );
     if (data instanceof BaseModel) return data.toObject();
     return data;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Optional static convenience insert
+  // ---------------------------------------------------------------------------
+  static async insertOne(driver, data) {
+    const instance = new this(driver);
+    instance._setData(data);
+    return instance.insert();
   }
 }

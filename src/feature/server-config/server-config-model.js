@@ -4,9 +4,7 @@ import BaseModel from "../../core/base/base-model.js";
 
 export default class ServerConfigModel extends BaseModel {
   defineSchema(schema) {
-    schema
-      .addPrimary("id", { type: "auto" })
-      .addInteger("node_id", true, 1, 10000);
+    schema.addPrimary("node_id", { type: "integer" });
     /*      
       .addInteger("http_port", true, 1, 65000, 80)
       .addString("database_uri", true, 1, 255)
