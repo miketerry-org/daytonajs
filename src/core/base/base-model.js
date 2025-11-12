@@ -193,6 +193,7 @@ export default class BaseModel extends BaseClass {
   }
 
   async insert() {
+    console.log("this._data", this._data);
     const results = this._schema.validate(this._data);
     if (!results.valid) {
       this._logValidationErrors("insert", results.errors);

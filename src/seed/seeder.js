@@ -1,11 +1,9 @@
-// seeder.js:
-
 import fs from "fs";
 import path from "path";
 import * as TOML from "@iarna/toml";
 import Config from "../core/utility/Config.js";
-import Mongodriver from "../core/db/drivers/mongodb-driver.js";
 import ServerConfigModel from "../feature/server-config/server-config-model.js";
+import MongoDBDriver from "../core/db/drivers/mongodb-driver.js";
 
 function loadServerConfig() {
   const filename = path.resolve("src/seed/configs.toml");
@@ -16,18 +14,20 @@ function loadServerConfig() {
 
 async function mainloop() {
   const config = loadServerConfig();
-  const driver = new Mongodriver(config);
+  const driver = new MongoDBDriver(config);
 
-  console.log("config", config);
   try {
     await driver.connect();
 
+    // Ensure you pass the actual client or connection object expected by your model
     const model = new ServerConfigModel(driver);
-    await model.insertOne(config);
-    console.log("after", model.node_id);
-    console.log("count", await model.count());
+    const data = await model.insertOne(config, { returnFull: true });
+    console.log("data", data);
+
+    // await driver.deleteMany("server_configs"); // you might want to move this AFTER connect
   } catch (err) {
     console.error("Seeder error:", err);
+    throw err; // <-- fixed Err -> err
   } finally {
     await driver.disconnect();
   }

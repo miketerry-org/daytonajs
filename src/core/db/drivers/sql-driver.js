@@ -1,191 +1,206 @@
-// sql-driver.js:
+// sql-driver.js
 
-import BaseDriver from "../../base/base-driver.js";
+import BaseDriver from "./base-driver.js";
 
 export default class SQLDriver extends BaseDriver {
-  constructor(config = {}) {
-    super(config);
-    this.db = null; // concrete subclass must initialize this
+  constructor(dbClient) {
+    super();
+    this.db = dbClient; // expects a SQL client/connection
   }
 
-  /* =============================================================
-   * Table / Column Formatting
-   * ============================================================= */
+  // ---------------------------------------------------------------------------
+  // CRUD operations
+  // ---------------------------------------------------------------------------
 
-  /**
-   * SQL convention: UPPERCASE_SNAKE_CASE_PLURAL
-   * e.g. ServerConfigModel → SERVER_CONFIGS
-   */
-  formatTableName(modelName) {
-    return BaseDriver.toSnakeCasePlural(modelName, true);
+  async findById(table, id) {
+    const row = await this.db(table).where("id", id).first();
+    return row || null;
   }
 
-  /**
-   * SQL primary key field name convention.
-   * Most SQL databases use "id" (auto-increment or UUID).
-   * Subclasses can override if needed (e.g., Postgres UUID id).
-   */
-  formatPrimaryKey(logicalKey = "id") {
-    return logicalKey;
+  async findMany(table, whereClause = {}) {
+    const rows = await this.db(table).where(whereClause);
+    return rows;
   }
 
-  /**
-   * SQL doesn’t need to rename keys when converting entities,
-   * but we define this for consistency with document databases.
-   */
-  transformEntityPrimaryKey(entity, schema, toDatabase = true) {
-    return entity;
+  async insertOne(table, schema, data, options = {}) {
+    const {
+      valid,
+      errors,
+      value: validatedData,
+    } = this.validate(table, schema, data, options);
+    if (!valid && options.strict) throw new Error(errors.join(", "));
+
+    const result = await this.db(table).insert(validatedData).returning("*");
+    return options.returnFull ? result[0] : { id: result[0].id };
   }
 
-  /* =============================================================
-   * Create Operations
-   * ============================================================= */
-  async insertOne(table, entity) {
-    const keys = Object.keys(entity);
-    const cols = keys.map(k => `"${k}"`).join(", ");
-    const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
-    const sql = `INSERT INTO "${table}" (${cols}) VALUES (${placeholders}) RETURNING *`;
-    const result = await this.execute(sql, Object.values(entity));
-    return result[0];
-  }
+  async insertMany(table, schema, data = [], options = {}) {
+    const validatedRows = [];
+    const errors = [];
 
-  async insertMany(table, entities) {
-    const results = [];
-    for (const entity of entities) {
-      const r = await this.insertOne(table, entity);
-      results.push(r);
+    for (const row of data) {
+      const {
+        valid,
+        errors: rowErrors,
+        value: validatedData,
+      } = this.validate(table, schema, row, options);
+      if (!valid) {
+        errors.push(...rowErrors);
+        if (options.strict) continue;
+      }
+      validatedRows.push(validatedData);
     }
-    return results;
+
+    if (options.strict && errors.length) throw new Error(errors.join(", "));
+
+    const result = await this.db(table).insert(validatedRows).returning("*");
+    return options.returnFull ? result : result.map(r => ({ id: r.id }));
   }
 
-  /* =============================================================
-   * Read Operations
-   * ============================================================= */
-  async findOne(table, criteria) {
-    const { sql, params } = this.buildWhereClause(table, criteria, 1);
-    const rows = await this.execute(`${sql} LIMIT 1`, params);
-    return rows[0] || null;
+  async updateOne(table, schema, data, options = {}) {
+    const {
+      valid,
+      errors,
+      value: validatedData,
+    } = this.validate(table, schema, data, options);
+    if (!valid && options.strict) throw new Error(errors.join(", "));
+
+    if (!validatedData.id)
+      throw new Error("Missing primary key 'id' for update");
+
+    const result = await this.db(table)
+      .where("id", validatedData.id)
+      .update(validatedData)
+      .returning("*");
+    return options.returnFull ? result[0] : { id: validatedData.id };
   }
 
-  async findMany(table, criteria) {
-    const { sql, params } = this.buildWhereClause(table, criteria, 1);
-    return await this.execute(sql, params);
-  }
-
-  async findById(table, id, idField = "id") {
-    const sql = `SELECT * FROM "${table}" WHERE "${idField}"=$1 LIMIT 1`;
-    const rows = await this.execute(sql, [id]);
-    return rows[0] || null;
-  }
-
-  async count(table, criteria) {
-    const { sql, params } = this.buildWhereClause(table, criteria, 1);
-    const rows = await this.execute(
-      `SELECT COUNT(*) AS cnt FROM (${sql}) AS t`,
-      params
-    );
-    return rows[0]?.cnt ?? 0;
-  }
-
-  async exists(table, criteria) {
-    const row = await this.findOne(table, criteria);
-    return !!row;
-  }
-
-  /* =============================================================
-   * Update Operations
-   * ============================================================= */
-  async updateOne(table, entity, idField = "id") {
-    if (entity[idField] === undefined)
-      throw new Error(`updateOne requires entity with ${idField}`);
-    const id = entity[idField];
-    const updates = { ...entity };
-    delete updates[idField];
-    const keys = Object.keys(updates);
-    if (keys.length === 0) return false;
-
-    const setClause = keys.map((k, i) => `"${k}"=$${i + 1}`).join(", ");
-    const sql = `UPDATE "${table}" SET ${setClause} WHERE "${idField}"=$${
-      keys.length + 1
-    } RETURNING *`;
-    const params = [...keys.map(k => updates[k]), id];
-    const rows = await this.execute(sql, params);
-    return rows[0] || null;
-  }
-
-  async updateMany(table, entities, idField = "id") {
-    const results = [];
-    for (const entity of entities) {
-      results.push(await this.updateOne(table, entity, idField));
+  async updateMany(table, schema, data, whereClause = {}) {
+    const updates = [];
+    for (const row of data) {
+      const { valid, value: validatedData } = this.validate(table, schema, row);
+      if (!valid) continue;
+      updates.push(validatedData);
     }
-    return results;
+
+    const result = await this.db(table).where(whereClause).update(updates);
+    return result;
   }
 
-  async upsert(table, entity, idField = "id") {
-    if (!entity[idField]) {
-      return this.insertOne(table, entity);
-    } else {
-      const updated = await this.updateOne(table, entity, idField);
-      if (!updated) return this.insertOne(table, entity);
-      return updated;
+  async upsert(table, schema, data, options = {}) {
+    const {
+      valid,
+      errors,
+      value: validatedData,
+    } = this.validate(table, schema, data, options);
+    if (!valid && options.strict) throw new Error(errors.join(", "));
+
+    const result = await this.db(table)
+      .insert(validatedData)
+      .onConflict(schema.getPrimaryKeyField())
+      .merge()
+      .returning("*");
+
+    return options.returnFull ? result[0] : { id: result[0].id };
+  }
+
+  async upsertMany(table, schema, data = [], options = {}) {
+    const validatedRows = [];
+    const errors = [];
+
+    for (const row of data) {
+      const {
+        valid,
+        errors: rowErrors,
+        value: validatedData,
+      } = this.validate(table, schema, row, options);
+      if (!valid) {
+        errors.push(...rowErrors);
+        if (options.strict) continue;
+      }
+      validatedRows.push(validatedData);
     }
+
+    if (options.strict && errors.length) throw new Error(errors.join(", "));
+
+    const result = await this.db(table)
+      .insert(validatedRows)
+      .onConflict(schema.getPrimaryKeyField())
+      .merge()
+      .returning("*");
+
+    return options.returnFull ? result : result.map(r => ({ id: r.id }));
   }
 
-  /* =============================================================
-   * Delete Operations
-   * ============================================================= */
-  async deleteOne(table, entity, idField = "id") {
-    if (entity[idField] === undefined)
-      throw new Error(`deleteOne requires entity with ${idField}`);
-    const sql = `DELETE FROM "${table}" WHERE "${idField}"=$1`;
-    const result = await this.execute(sql, [entity[idField]]);
-    return result.rowCount > 0;
-  }
+  // ---------------------------------------------------------------------------
+  // Delete operations with strict validation
+  // ---------------------------------------------------------------------------
 
-  async deleteMany(table, entities, idField = "id") {
-    const results = [];
-    for (const entity of entities) {
-      results.push(await this.deleteOne(table, entity, idField));
+  async deleteOne(table, whereClause = {}, options = { strict: true }) {
+    if (
+      options.strict &&
+      (!whereClause || Object.keys(whereClause).length === 0)
+    ) {
+      throw new Error(
+        "Strict mode enabled: deleteOne requires a non-empty whereClause or id"
+      );
     }
-    return results;
+
+    const result = await this.db(table).where(whereClause).del();
+    return result;
   }
 
-  async deleteAll(table) {
-    const sql = `DELETE FROM "${table}"`;
-    const result = await this.execute(sql, []);
-    return result.rowCount ?? 0;
+  async deleteMany(table, whereClause = {}, options = { strict: true }) {
+    if (
+      options.strict &&
+      (!whereClause || Object.keys(whereClause).length === 0)
+    ) {
+      throw new Error(
+        "Strict mode enabled: deleteMany requires a non-empty whereClause"
+      );
+    }
+
+    const result = await this.db(table).where(whereClause).del();
+    return result;
   }
 
-  /* =============================================================
-   * Transactions
-   * ============================================================= */
+  // ---------------------------------------------------------------------------
+  // Other utility operations
+  // ---------------------------------------------------------------------------
+
+  async count(table, whereClause = {}) {
+    const [{ count }] = await this.db(table)
+      .where(whereClause)
+      .count("* as count");
+    return parseInt(count, 10);
+  }
+
+  async exists(table, whereClause = {}) {
+    const count = await this.count(table, whereClause);
+    return count > 0;
+  }
+
+  async aggregate(table, pipeline) {
+    throw new Error("SQLDriver.aggregate() not implemented");
+  }
+
+  async query(rawQuery, options) {
+    return this.db.raw(rawQuery, options?.bindings || []);
+  }
+
   async transaction(callback) {
-    if (!this.db) throw new Error("DB connection not established");
-    await this.execute("BEGIN");
-    try {
-      await callback();
-      await this.execute("COMMIT");
-    } catch (err) {
-      await this.execute("ROLLBACK");
-      throw err;
-    }
+    return await this.db.transaction(callback);
   }
 
-  /* =============================================================
-   * Helpers
-   * ============================================================= */
-  buildWhereClause(table, criteria, startIndex = 1) {
-    const keys = Object.keys(criteria || {});
-    const params = keys.map(k => criteria[k]);
-    const clauses = keys.map((k, i) => `"${k}"=$${i + startIndex}`);
-    const sql =
-      `SELECT * FROM "${table}"` +
-      (clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "");
-    return { sql, params };
+  async startTransaction() {
+    return await this.db.transaction();
   }
 
-  // Abstract: Subclasses must implement this
-  async execute(sql, params = []) {
-    throw new Error("Subclasses must implement execute(sql, params)");
+  async commitTransaction(trx) {
+    await trx.commit();
+  }
+
+  async rollbackTransaction(trx) {
+    await trx.rollback();
   }
 }

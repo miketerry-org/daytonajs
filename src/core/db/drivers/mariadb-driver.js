@@ -1,5 +1,5 @@
-// mariadb-driver.js:
-
+// mariadb-driver.js
+// -----------------------------------------------------------------------------
 import verify from "../../utility/verify.js";
 import SQLDriver from "./sql-driver.js";
 import DriverRegistry from "../driver-registry.js";
@@ -32,7 +32,7 @@ export default class MariaDBDriver extends SQLDriver {
     return verify(config)
       .isString("host", true, 1, 255)
       .isString("user", true, 1, 255)
-      .isString("password", true, 0, 255) // allow empty passwords
+      .isString("password", true, 0, 255)
       .isString("database", true, 1, 255)
       .isInteger("port", true, 1, 65000, 3306);
   }
@@ -41,15 +41,13 @@ export default class MariaDBDriver extends SQLDriver {
    * Connection Management
    * ============================================================= */
   async connect() {
-    if (this.pool) return; // already connected
+    if (this.pool) return;
 
     await this.verifyConfig(this.config);
 
-    // Lazy-load mariadb dependency
     const mariadb = await import("mariadb");
     this.mariadbModule = mariadb;
 
-    // Create a small, efficient connection pool
     this.pool = mariadb.createPool({
       host: this.config.host,
       user: this.config.user,
@@ -61,9 +59,9 @@ export default class MariaDBDriver extends SQLDriver {
       bigNumberStrings: false,
     });
 
-    // Verify a connection immediately
     const conn = await this.pool.getConnection();
     conn.release();
+
     console.log(
       `[MariaDBDriver] Connected to ${this.config.database}@${this.config.host}:${this.config.port}`
     );
@@ -87,30 +85,28 @@ export default class MariaDBDriver extends SQLDriver {
   async execute(sql, params = []) {
     if (!this.pool) throw new Error("MariaDBDriver: Database not connected.");
 
-    // If a transaction is active, reuse its connection
     const conn = this.connection || (await this.pool.getConnection());
-    let rows;
+    let result;
 
     try {
-      rows = await conn.query(sql, params);
+      result = await conn.query(sql, params);
 
-      // The mariadb client sometimes includes metadata as the last element
-      if (
-        Array.isArray(rows) &&
-        rows.length &&
-        typeof rows[rows.length - 1] === "object" &&
-        "affectedRows" in rows[rows.length - 1]
+      // Normalize rowCount for consistency with SQLDriver expectations
+      if (Array.isArray(result)) {
+        result.rowCount = result.affectedRows ?? result.length;
+      } else if (
+        result &&
+        typeof result === "object" &&
+        "affectedRows" in result
       ) {
-        const { affectedRows } = rows.pop();
-        rows.rowCount = affectedRows;
+        result.rowCount = result.affectedRows;
       }
 
-      return rows;
+      return result;
     } catch (err) {
       console.error("[MariaDBDriver] SQL Error:", err.message, "\nQuery:", sql);
       throw err;
     } finally {
-      // Only release if not in transaction
       if (!this.connection) conn.release();
     }
   }
@@ -147,17 +143,15 @@ export default class MariaDBDriver extends SQLDriver {
   }
 
   /* =============================================================
-   * Table Name Formatting (SQLDriver override if needed)
+   * Table Name / Primary Key Formatting
    * ============================================================= */
   formatTableName(modelName) {
     // MariaDB convention: lowercase plural snake_case table names
-    // e.g. "ServerConfigModel" → "server_configs"
-    return super.constructor.toSnakeCasePlural(modelName, false);
+    return SQLDriver.toSnakeCasePlural(modelName, false);
   }
 
   formatPrimaryKey(logicalKey = "id") {
-    // MariaDB default primary key convention is `id` (auto_increment)
-    return logicalKey;
+    return logicalKey; // default MariaDB primary key convention
   }
 }
 

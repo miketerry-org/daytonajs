@@ -1,5 +1,5 @@
-// postgres-driver.js:
-
+// postgres-driver.js
+// -----------------------------------------------------------------------------
 import verify from "../../utility/verify.js";
 import SQLDriver from "./sql-driver.js";
 import DriverRegistry from "../driver-registry.js";
@@ -43,7 +43,7 @@ export default class PostgresDriver extends SQLDriver {
     return verify(config)
       .isString("host", true, 1, 255)
       .isString("user", true, 1, 255)
-      .isString("password", false, 0, 255)
+      .isString("password", false, 0, 255) // allow empty password
       .isString("database", true, 1, 255)
       .isInteger("port", true, 1, 65000, 5432);
   }
@@ -54,7 +54,7 @@ export default class PostgresDriver extends SQLDriver {
   async connect() {
     if (this.pool) return;
 
-    this.verifyConfig(this.config);
+    await this.verifyConfig(this.config);
 
     const { Pool } = await import("pg");
     this.pgModule = { Pool };
@@ -91,8 +91,11 @@ export default class PostgresDriver extends SQLDriver {
     const executor = this.client || this.pool;
     try {
       const result = await executor.query(sql, params);
-      // Normalize for consistency with MySQL/MariaDB
-      result.rows.rowCount = result.rowCount ?? result.rows.length ?? 0;
+
+      // Normalize rowCount for consistency with MySQL/MariaDB
+      result.rows.rowCount =
+        result.rowCount ??
+        (Array.isArray(result.rows) ? result.rows.length : 0);
       return result.rows;
     } catch (err) {
       console.error(
@@ -140,13 +143,10 @@ export default class PostgresDriver extends SQLDriver {
    * Table & Primary Key Formatting
    * ============================================================= */
   formatTableName(modelName) {
-    // PostgreSQL prefers lowercase plural snake_case
-    // e.g. "UserModel" → "users", "ServerConfigModel" → "server_configs"
-    return super.constructor.toSnakeCasePlural(modelName, false);
+    return SQLDriver.toSnakeCasePlural(modelName, false);
   }
 
   formatPrimaryKey(logicalKey = "id") {
-    // For PostgreSQL: standard "id" SERIAL PRIMARY KEY or UUID, depending on schema
     return logicalKey;
   }
 }

@@ -40,7 +40,8 @@
     "method-override": "^3.0.0",
     "mysql2": "^3.15.3",
     "pg": "^8.16.3",
-    "pluralize": "^8.0.0"
+    "pluralize": "^8.0.0",
+    "sql-where-parser": "^2.2.1"
   },
   "devDependencies": {
     "mongodb": "^6.20.0"

@@ -1,22 +1,16 @@
-// -----------------------------------------------------------------------------
 // mongodb-driver.js
-// -----------------------------------------------------------------------------
+
 import { MongoClient, ObjectId } from "mongodb";
 import BaseDriver from "../../base/base-driver.js";
+import sqlToMongoDB from "../../utility/sql-to-mongodb.js";
 
 export default class MongoDBDriver extends BaseDriver {
   _client;
   _db;
+  _ensuredIndexes = new Set();
 
-  /**
-   * config: {
-   *   database_uri: string,  // Full MongoDB URI including database
-   *   options: object        // Optional MongoClient options
-   * }
-   */
   constructor(config = {}) {
     super(config);
-
     const { database_uri: uri, options = {} } = config;
 
     if (!uri || typeof uri !== "string") {
@@ -26,13 +20,9 @@ export default class MongoDBDriver extends BaseDriver {
     }
 
     this._client = new MongoClient(uri, options);
-    // Use the database specified in the URI
     this._db = this._client.db();
   }
 
-  // ---------------------------------------------------------------------------
-  // Connection
-  // ---------------------------------------------------------------------------
   async connect() {
     if (!this._client.topology || !this._client.topology.isConnected()) {
       await this._client.connect();
@@ -46,96 +36,228 @@ export default class MongoDBDriver extends BaseDriver {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Collection / Table access
-  // ---------------------------------------------------------------------------
   collection(name) {
     return this._db.collection(name);
   }
 
-  // ---------------------------------------------------------------------------
-  // CRUD operations
-  // ---------------------------------------------------------------------------
+  async ensureIndexes(table, schema) {
+    if (this._ensuredIndexes.has(table)) return;
+
+    const indexes = schema.getIndexes?.() || [];
+    const col = this.collection(table);
+    for (const idx of indexes) {
+      const { fields, options } = idx;
+      await col.createIndex(fields, options);
+    }
+    this._ensuredIndexes.add(table);
+  }
+
+  hasEnsuredIndexesFor(table) {
+    return this._ensuredIndexes.has(table);
+  }
+
   async findById(table, id) {
     return this.collection(table).findOne({ _id: new ObjectId(id) });
   }
 
-  async findMany(table, criteria = {}) {
-    return this.collection(table).find(criteria).toArray();
+  async findMany(table, whereClause = "") {
+    const filter = sqlToMongoDB(whereClause);
+    return this.collection(table).find(filter).toArray();
   }
 
-  async insertOne(table, document) {
-    const result = await this.collection(table).insertOne(document);
+  // ---------------------------------------------------------------------------
+  // Insert
+  // ---------------------------------------------------------------------------
+  async insertOne(table, schema, data, options = {}) {
+    const { returnFull = false, strict = true, session = null } = options;
+
+    const validation = schema.validate(data);
+    if (!validation.valid) {
+      throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+    }
+
+    let document = validation.value;
+    if (strict) {
+      const allowedFields = Object.keys(schema.getSchema());
+      document = Object.fromEntries(
+        Object.entries(document).filter(([key]) => allowedFields.includes(key))
+      );
+    }
+
+    const col = this.collection(table);
+    const result = await col.insertOne(document, { session });
+
+    if (returnFull) {
+      return await col.findOne({ _id: result.insertedId });
+    }
+
     return { _id: result.insertedId };
   }
 
-  async insertMany(table, documents) {
-    const result = await this.collection(table).insertMany(documents);
-    return Object.keys(result.insertedIds).map(i => ({
-      _id: result.insertedIds[i],
-    }));
-  }
+  async insertMany(table, schema, data = [], options = {}) {
+    const { returnFull = false, strict = true, session = null } = options;
 
-  async updateOne(table, document) {
-    const pk = "_id";
-    if (!document[pk]) throw new Error("updateOne requires _id");
-    const id = new ObjectId(document[pk]);
-    const { matchedCount } = await this.collection(table).updateOne(
-      { _id: id },
-      { $set: document }
-    );
-    return { matchedCount };
-  }
+    const documents = data.map(d => {
+      const validation = schema.validate(d);
+      if (!validation.valid) {
+        throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+      }
+      let doc = validation.value;
+      if (strict) {
+        const allowedFields = Object.keys(schema.getSchema());
+        doc = Object.fromEntries(
+          Object.entries(doc).filter(([key]) => allowedFields.includes(key))
+        );
+      }
+      return doc;
+    });
 
-  async updateMany(table, documents) {
-    const results = [];
-    for (const doc of documents) {
-      const result = await this.updateOne(table, doc);
-      results.push(result);
+    const col = this.collection(table);
+    const result = await col.insertMany(documents, { session });
+
+    if (returnFull) {
+      const ids = Object.values(result.insertedIds);
+      return await col.find({ _id: { $in: ids } }).toArray();
     }
-    return results;
+
+    return Object.values(result.insertedIds);
   }
 
-  async upsert(table, document) {
+  // ---------------------------------------------------------------------------
+  // Update
+  // ---------------------------------------------------------------------------
+  async updateOne(table, schema, data, options = {}) {
+    const { returnFull = false, strict = true, session = null } = options;
     const pk = "_id";
+
+    if (!data[pk]) throw new Error("updateOne requires _id");
+
+    const id = new ObjectId(data[pk]);
+
+    const validation = schema.validate(data);
+    if (!validation.valid) {
+      throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+    }
+
+    let document = validation.value;
+    if (strict) {
+      const allowedFields = Object.keys(schema.getSchema());
+      document = Object.fromEntries(
+        Object.entries(document).filter(([key]) => allowedFields.includes(key))
+      );
+    }
+
+    const col = this.collection(table);
+    await col.updateOne({ _id: id }, { $set: document }, { session });
+
+    if (returnFull) {
+      return await col.findOne({ _id: id });
+    }
+
+    return { _id: id };
+  }
+
+  async updateMany(table, schema, data, whereClause = "", options = {}) {
+    const { strict = true, session = null } = options;
+
+    const validation = schema.validate(data);
+    if (!validation.valid) {
+      throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+    }
+
+    let updateData = validation.value;
+    if (strict) {
+      const allowedFields = Object.keys(schema.getSchema());
+      updateData = Object.fromEntries(
+        Object.entries(updateData).filter(([key]) =>
+          allowedFields.includes(key)
+        )
+      );
+    }
+
+    const filter = sqlToMongoDB(whereClause);
+    const result = await this.collection(table).updateMany(
+      filter,
+      { $set: updateData },
+      { session }
+    );
+
+    return {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Upsert
+  // ---------------------------------------------------------------------------
+  async upsert(table, schema, data, options = {}) {
+    const { returnFull = false, strict = true, session = null } = options;
+    const pk = "_id";
+
+    const validation = schema.validate(data);
+    if (!validation.valid) {
+      throw new Error(`Validation failed: ${validation.errors.join(", ")}`);
+    }
+
+    let document = validation.value;
+    if (strict) {
+      const allowedFields = Object.keys(schema.getSchema());
+      document = Object.fromEntries(
+        Object.entries(document).filter(([key]) => allowedFields.includes(key))
+      );
+    }
+
     const id = document[pk] ? new ObjectId(document[pk]) : new ObjectId();
-    const result = await this.collection(table).updateOne(
+    const col = this.collection(table);
+
+    await col.updateOne(
       { _id: id },
       { $set: document },
-      { upsert: true }
+      { upsert: true, session }
     );
-    return { _id: id, upsertedCount: result.upsertedCount };
+
+    if (returnFull) {
+      return await col.findOne({ _id: id });
+    }
+
+    return { _id: id };
   }
 
-  async upsertMany(table, documents) {
+  async upsertMany(table, schema, data = [], options = {}) {
     const results = [];
-    for (const doc of documents) {
-      const result = await this.upsert(table, doc);
+    for (const doc of data) {
+      const result = await this.upsert(table, schema, doc, options);
       results.push(result);
     }
     return results;
   }
 
-  async deleteOne(table, criteria) {
-    const id = criteria._id ? new ObjectId(criteria._id) : undefined;
-    const result = await this.collection(table).deleteOne({ _id: id });
+  // ---------------------------------------------------------------------------
+  // Delete / Count / Exists / Aggregate
+  // ---------------------------------------------------------------------------
+  async deleteOne(table, whereClause = "", options = {}) {
+    const { session = null } = options;
+    const filter = sqlToMongoDB(whereClause);
+    const result = await this.collection(table).deleteOne(filter, { session });
     return { deletedCount: result.deletedCount };
   }
 
-  async deleteMany(table, ids) {
-    const objectIds = ids.map(id => new ObjectId(id));
-    const result = await this.collection(table).deleteMany({
-      _id: { $in: objectIds },
-    });
+  async deleteMany(table, whereClause = "", options = {}) {
+    const { session = null } = options;
+    const filter = sqlToMongoDB(whereClause);
+    const result = await this.collection(table).deleteMany(filter, { session });
     return { deletedCount: result.deletedCount };
   }
 
-  async count(table, criteria = {}) {
-    return this.collection(table).countDocuments(criteria);
+  async count(table, whereClause = "") {
+    const filter = sqlToMongoDB(whereClause);
+    return this.collection(table).countDocuments(filter);
   }
 
-  async exists(table, criteria = {}) {
-    const count = await this.collection(table).countDocuments(criteria, {
+  async exists(table, whereClause = "") {
+    const filter = sqlToMongoDB(whereClause);
+    const count = await this.collection(table).countDocuments(filter, {
       limit: 1,
     });
     return count > 0;
@@ -146,7 +268,7 @@ export default class MongoDBDriver extends BaseDriver {
   }
 
   async query(rawQuery, options = {}) {
-    return rawQuery(this.collection(options.table));
+    return rawQuery(this.collection(options.table), options);
   }
 
   // ---------------------------------------------------------------------------
@@ -173,7 +295,7 @@ export default class MongoDBDriver extends BaseDriver {
     let result;
     try {
       await session.withTransaction(async () => {
-        result = await callback();
+        result = await callback({ session });
       });
     } finally {
       session.endSession();

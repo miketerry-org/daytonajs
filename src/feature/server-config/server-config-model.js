@@ -4,8 +4,8 @@ import BaseModel from "../../core/base/base-model.js";
 
 export default class ServerConfigModel extends BaseModel {
   defineSchema(schema) {
-    schema.addPrimary("node_id", { type: "integer" });
-    /*      
+    schema
+      .addPrimary("node_id", { type: "integer" })
       .addInteger("http_port", true, 1, 65000, 80)
       .addString("database_uri", true, 1, 255)
       .addString("log_name", true, 1, 255)
@@ -24,6 +24,5 @@ export default class ServerConfigModel extends BaseModel {
       .addString("views_partials_path", true, 1, 255)
       .addString("emails_templates_path", true, 1, 255)
       .addIndex("node_id", { unique: true });
-      */
   }
 }

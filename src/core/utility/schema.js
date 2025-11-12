@@ -131,7 +131,16 @@ export default class Schema {
   // ---------------------------------------------------------------------------
   // Validation
   // ---------------------------------------------------------------------------
-  validate(data = {}) {
+  /**
+   * Validate data against the schema.
+   *
+   * @param {string} table - The table name (for error tracking / logging)
+   * @param {object} data - The data to validate
+   * @param {object} [options={}] - Validation options
+   * @param {boolean} [options.strict=false] - Throw on validation errors
+   * @returns {object} { table, valid, errors, value }
+   */
+  validate(table, data = {}, options = {}) {
     const errors = [];
     const validated = {};
 
@@ -193,7 +202,14 @@ export default class Schema {
       validated[name] = value;
     }
 
+    if (options.strict && errors.length > 0) {
+      throw new Error(
+        `Validation failed for table ${table}: ${errors.join(", ")}`
+      );
+    }
+
     return {
+      table,
       valid: errors.length === 0,
       errors,
       value: validated,
@@ -201,35 +217,47 @@ export default class Schema {
   }
 
   // ---------------------------------------------------------------------------
+  // Filtering
+  // ---------------------------------------------------------------------------
+
+  filter(data = {}, { strict = false, warn = false } = {}) {
+    const allowed = Object.keys(this.definition.fields);
+    const filtered = {};
+    const extras = [];
+
+    for (const [key, value] of Object.entries(data)) {
+      if (allowed.includes(key)) {
+        filtered[key] = value;
+      } else {
+        extras.push(key);
+      }
+    }
+
+    if (extras.length > 0) {
+      const msg = `Unknown schema fields: ${extras.join(", ")}`;
+      if (strict) throw new Error(msg);
+      if (warn) console.warn(`[Schema] ⚠️ ${msg}`);
+    }
+
+    return filtered;
+  }
+
+  // ---------------------------------------------------------------------------
   // Accessors
   // ---------------------------------------------------------------------------
 
-  /**
-   * Return only field definitions (used by BaseModel).
-   */
   getSchema() {
     return this.definition.fields;
   }
 
-  /**
-   * Return the full schema definition.
-   */
   getDefinition() {
     return this.definition;
   }
 
-  /**
-   * Return the name of the primary key field.
-   */
   getPrimaryKeyField() {
     return this.definition.primaryField;
   }
 
-  /**
-   * Return normalized index definitions for driver consumption.
-   * Each entry:
-   *  { fields: {field1: 1, field2: -1}, options: { unique: true/false, primary: true/false } }
-   */
   getIndexes() {
     return this.definition.indexes.map(idx => {
       const fields = {};
