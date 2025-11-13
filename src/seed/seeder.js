@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import * as TOML from "@iarna/toml";
 import Config from "../core/utility/Config.js";
-import ServerConfigModel from "../feature/server-config/server-config-model.js";
+import ServerConfigGateway from "../feature/server-config/server-config-gateway.js";
 import MongoDBDriver from "../core/db/drivers/mongodb-driver.js";
 
 function loadServerConfig() {
@@ -20,11 +20,12 @@ async function mainloop() {
     await driver.connect();
 
     // Ensure you pass the actual client or connection object expected by your model
-    const model = new ServerConfigModel(driver);
-    const data = await model.insertOne(config, { returnFull: true });
-    console.log("data", data);
+    const model = new ServerConfigGateway(driver);
 
-    // await driver.deleteMany("server_configs"); // you might want to move this AFTER connect
+    // delete any records from previous run
+    await model.deleteMany();
+
+    const data = await model.insertOne(config, { returnFull: true });
   } catch (err) {
     console.error("Seeder error:", err);
     throw err; // <-- fixed Err -> err

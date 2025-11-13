@@ -1,4 +1,5 @@
 // mariadb-driver.js
+
 // -----------------------------------------------------------------------------
 import verify from "../../utility/verify.js";
 import SQLDriver from "./sql-driver.js";

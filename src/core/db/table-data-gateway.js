@@ -1,73 +1,140 @@
 // -----------------------------------------------------------------------------
 // table-data-gateway.js
 // -----------------------------------------------------------------------------
-import BaseModel from "./base-model.js";
-import { ValidationError } from "./base-model.js";
+
+import BaseModel, { ValidationError } from "../base/base-model.js";
 
 export default class TableDataGateway extends BaseModel {
-  async find(id) {
-    return this.driver.findById(this.tableName, id);
+  constructor(driver, tableName, schema, config = {}) {
+    super(driver, tableName, schema, config);
+    // No need to redefine _driver/_tableName/_schema here because BaseModel already does it
   }
 
-  async findAll(criteria = {}) {
-    return this.driver.findMany(this.tableName, criteria);
+  // ---------------------------------------------------------------------------
+  // Query methods
+  // ---------------------------------------------------------------------------
+  async findById(id, options = {}) {
+    return this._driver.findById(this._tableName, id, options);
   }
 
-  async insert(data) {
-    const results = this._schema.validate(data);
-    if (!results.valid) {
-      this._logValidationErrors("insert", results.errors);
-      throw new ValidationError(this.name, "insert", results.errors);
-    }
-    return this.driver.insertOne(this.tableName, results.value);
+  async findMany(filters = {}, options = {}) {
+    return this._driver.findMany(this._tableName, filters, options);
   }
 
-  async update(data) {
-    return this._handleValidationAndExecute(
-      "update",
-      data,
-      async validated => this.driver.updateOne(this.tableName, validated),
-      { partial: true }
+  async count(filters = {}, options = {}) {
+    return this._driver.count(this._tableName, filters, options);
+  }
+
+  async exists(filters = {}, options = {}) {
+    return this._driver.exists(this._tableName, filters, options);
+  }
+
+  async aggregate(pipeline = [], options = {}) {
+    return this._driver.aggregate(this._tableName, pipeline, options);
+  }
+
+  async query(queryString, params = [], options = {}) {
+    return this._driver.query(this._tableName, queryString, params, options);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Insert / Upsert
+  // ---------------------------------------------------------------------------
+  async insertOne(record, options = {}) {
+    return super._handleValidationAndExecute(
+      "insertOne",
+      record,
+      validData => this._driver.insertOne(this._tableName, validData, options),
+      options
     );
   }
 
-  async upsert(data) {
-    return this._handleValidationAndExecute("upsert", data, async validated =>
-      this.driver.upsert(this.tableName, validated)
+  async insertMany(records = [], options = {}) {
+    return Promise.all(
+      records.map(record =>
+        super._handleValidationAndExecute(
+          "insertMany",
+          record,
+          validData =>
+            this._driver.insertOne(this._tableName, validData, options),
+          options
+        )
+      )
     );
   }
 
-  async delete(idOrCriteria) {
-    const criteria =
-      typeof idOrCriteria === "object" ? idOrCriteria : { id: idOrCriteria };
-    return this.driver.deleteOne(this.tableName, criteria);
+  async upsert(record, options = {}) {
+    return super._handleValidationAndExecute(
+      "upsert",
+      record,
+      validData => this._driver.upsert(this._tableName, validData, options),
+      options
+    );
   }
 
-  // Batch operations
-  insertMany(records) {
-    return this.driver.insertMany(this.tableName, records);
-  }
-  updateMany(records) {
-    return this.driver.updateMany(this.tableName, records);
-  }
-  upsertMany(records) {
-    return this.driver.upsertMany(this.tableName, records);
-  }
-  deleteMany(criteria) {
-    return this.driver.deleteMany(this.tableName, criteria);
+  async upsertMany(records = [], options = {}) {
+    return Promise.all(
+      records.map(record =>
+        super._handleValidationAndExecute(
+          "upsertMany",
+          record,
+          validData => this._driver.upsert(this._tableName, validData, options),
+          options
+        )
+      )
+    );
   }
 
-  // Aggregate and query
-  count(criteria) {
-    return this.driver.count(this.tableName, criteria);
+  // ---------------------------------------------------------------------------
+  // Update
+  // ---------------------------------------------------------------------------
+  async updateOne(id, record, options = {}) {
+    return super._handleValidationAndExecute(
+      "updateOne",
+      record,
+      validData =>
+        this._driver.updateOne(this._tableName, id, validData, options),
+      options
+    );
   }
-  exists(criteria) {
-    return this.driver.exists(this.tableName, criteria);
+
+  async updateMany(filters, record, options = {}) {
+    return super._handleValidationAndExecute(
+      "updateMany",
+      record,
+      validData =>
+        this._driver.updateMany(this._tableName, filters, validData, options),
+      options
+    );
   }
-  aggregate(pipeline) {
-    return this.driver.aggregate(this.tableName, pipeline);
+
+  // ---------------------------------------------------------------------------
+  // Delete
+  // ---------------------------------------------------------------------------
+  async deleteOne(id, options = {}) {
+    return this._driver.deleteOne(this._tableName, id, options);
   }
-  query(rawQuery, options = {}) {
-    return this.driver.query(rawQuery, options);
+
+  async deleteMany(filters, options = {}) {
+    return this._driver.deleteMany(this._tableName, filters, options);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transactions
+  // ---------------------------------------------------------------------------
+  async transaction(actions = []) {
+    return this._driver.transaction(this._tableName, actions);
+  }
+
+  async startTransaction() {
+    return this._driver.startTransaction();
+  }
+
+  async commitTransaction() {
+    return this._driver.commitTransaction();
+  }
+
+  async rollbackTransaction() {
+    return this._driver.rollbackTransaction();
   }
 }

@@ -8,7 +8,7 @@ http_port = 3000
 database_uri = "mongodb://localhost:27017/server"
 
 # --- Logging ---
-log_collection_name = "logs"
+log_name = "logs"
 log_expiration_days = 1
 log_capped = false
 log_max_size = 10
@@ -28,7 +28,7 @@ views_path = "views"
 views_default_layout = "default_layout.hbs"
 views_layouts_path = "views/layouts"
 views_partials_path = "views/partials"
-emails_path = "emails"
+emails_templates_path = "emails"
 
 
 # ============================================================

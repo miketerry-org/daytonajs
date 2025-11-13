@@ -5,7 +5,7 @@ import BaseDriver from "./base-driver.js";
 export default class SQLDriver extends BaseDriver {
   constructor(dbClient) {
     super();
-    this.db = dbClient; // expects a SQL client/connection
+    this.db = dbClient; // expects a knex-like SQL client
   }
 
   // ---------------------------------------------------------------------------
@@ -18,154 +18,118 @@ export default class SQLDriver extends BaseDriver {
   }
 
   async findMany(table, whereClause = {}) {
-    const rows = await this.db(table).where(whereClause);
-    return rows;
+    return await this.db(table).where(whereClause);
   }
 
-  async insertOne(table, schema, data, options = {}) {
-    const {
-      valid,
-      errors,
-      value: validatedData,
-    } = this.validate(table, schema, data, options);
-    if (!valid && options.strict) throw new Error(errors.join(", "));
+  async insertOne(table, data, options = {}) {
+    const { returnFull = false } = this.normalizeOptions(options);
 
-    const result = await this.db(table).insert(validatedData).returning("*");
-    return options.returnFull ? result[0] : { id: result[0].id };
+    const result = await this.db(table).insert(data).returning("*");
+    return returnFull ? result[0] : { id: result[0].id };
   }
 
-  async insertMany(table, schema, data = [], options = {}) {
-    const validatedRows = [];
-    const errors = [];
+  async insertMany(table, data = [], options = {}) {
+    const { returnFull = false } = this.normalizeOptions(options);
 
-    for (const row of data) {
-      const {
-        valid,
-        errors: rowErrors,
-        value: validatedData,
-      } = this.validate(table, schema, row, options);
-      if (!valid) {
-        errors.push(...rowErrors);
-        if (options.strict) continue;
-      }
-      validatedRows.push(validatedData);
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error(
+        "insertMany() requires a non-empty array of data objects"
+      );
     }
 
-    if (options.strict && errors.length) throw new Error(errors.join(", "));
-
-    const result = await this.db(table).insert(validatedRows).returning("*");
-    return options.returnFull ? result : result.map(r => ({ id: r.id }));
+    const result = await this.db(table).insert(data).returning("*");
+    return returnFull ? result : result.map(r => ({ id: r.id }));
   }
 
-  async updateOne(table, schema, data, options = {}) {
-    const {
-      valid,
-      errors,
-      value: validatedData,
-    } = this.validate(table, schema, data, options);
-    if (!valid && options.strict) throw new Error(errors.join(", "));
+  async updateOne(table, data, options = {}) {
+    const { returnFull = false } = this.normalizeOptions(options);
 
-    if (!validatedData.id)
-      throw new Error("Missing primary key 'id' for update");
+    if (!data.id) throw new Error("updateOne() requires a primary key 'id'");
 
+    const { id, ...updateData } = data;
     const result = await this.db(table)
-      .where("id", validatedData.id)
-      .update(validatedData)
+      .where("id", id)
+      .update(updateData)
       .returning("*");
-    return options.returnFull ? result[0] : { id: validatedData.id };
+
+    return returnFull ? result[0] : { id };
   }
 
-  async updateMany(table, schema, data, whereClause = {}) {
-    const updates = [];
-    for (const row of data) {
-      const { valid, value: validatedData } = this.validate(table, schema, row);
-      if (!valid) continue;
-      updates.push(validatedData);
+  async updateMany(table, data, whereClause = {}, options = {}) {
+    const { strict = true } = this.normalizeOptions(options);
+
+    if (strict && (!whereClause || Object.keys(whereClause).length === 0)) {
+      throw new Error(
+        "Strict mode enabled: updateMany() requires a non-empty whereClause"
+      );
     }
 
-    const result = await this.db(table).where(whereClause).update(updates);
-    return result;
+    const result = await this.db(table).where(whereClause).update(data);
+    return { affectedRows: result };
   }
 
-  async upsert(table, schema, data, options = {}) {
-    const {
-      valid,
-      errors,
-      value: validatedData,
-    } = this.validate(table, schema, data, options);
-    if (!valid && options.strict) throw new Error(errors.join(", "));
+  async upsert(table, data, options = {}) {
+    const { returnFull = false } = this.normalizeOptions(options);
 
     const result = await this.db(table)
-      .insert(validatedData)
-      .onConflict(schema.getPrimaryKeyField())
+      .insert(data)
+      .onConflict("id")
       .merge()
       .returning("*");
 
-    return options.returnFull ? result[0] : { id: result[0].id };
+    return returnFull ? result[0] : { id: result[0].id };
   }
 
-  async upsertMany(table, schema, data = [], options = {}) {
-    const validatedRows = [];
-    const errors = [];
+  async upsertMany(table, data = [], options = {}) {
+    const { returnFull = false } = this.normalizeOptions(options);
 
-    for (const row of data) {
-      const {
-        valid,
-        errors: rowErrors,
-        value: validatedData,
-      } = this.validate(table, schema, row, options);
-      if (!valid) {
-        errors.push(...rowErrors);
-        if (options.strict) continue;
-      }
-      validatedRows.push(validatedData);
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error(
+        "upsertMany() requires a non-empty array of data objects"
+      );
     }
 
-    if (options.strict && errors.length) throw new Error(errors.join(", "));
-
     const result = await this.db(table)
-      .insert(validatedRows)
-      .onConflict(schema.getPrimaryKeyField())
+      .insert(data)
+      .onConflict("id")
       .merge()
       .returning("*");
 
-    return options.returnFull ? result : result.map(r => ({ id: r.id }));
+    return returnFull ? result : result.map(r => ({ id: r.id }));
   }
 
   // ---------------------------------------------------------------------------
-  // Delete operations with strict validation
+  // Delete operations
   // ---------------------------------------------------------------------------
 
   async deleteOne(table, whereClause = {}, options = { strict: true }) {
-    if (
-      options.strict &&
-      (!whereClause || Object.keys(whereClause).length === 0)
-    ) {
+    const { strict } = this.normalizeOptions(options);
+
+    if (strict && (!whereClause || Object.keys(whereClause).length === 0)) {
       throw new Error(
-        "Strict mode enabled: deleteOne requires a non-empty whereClause or id"
+        "Strict mode enabled: deleteOne() requires a non-empty whereClause or id"
       );
     }
 
     const result = await this.db(table).where(whereClause).del();
-    return result;
+    return { deletedCount: result };
   }
 
   async deleteMany(table, whereClause = {}, options = { strict: true }) {
-    if (
-      options.strict &&
-      (!whereClause || Object.keys(whereClause).length === 0)
-    ) {
+    const { strict } = this.normalizeOptions(options);
+
+    if (strict && (!whereClause || Object.keys(whereClause).length === 0)) {
       throw new Error(
-        "Strict mode enabled: deleteMany requires a non-empty whereClause"
+        "Strict mode enabled: deleteMany() requires a non-empty whereClause"
       );
     }
 
     const result = await this.db(table).where(whereClause).del();
-    return result;
+    return { deletedCount: result };
   }
 
   // ---------------------------------------------------------------------------
-  // Other utility operations
+  // Utility operations
   // ---------------------------------------------------------------------------
 
   async count(table, whereClause = {}) {
@@ -180,13 +144,20 @@ export default class SQLDriver extends BaseDriver {
     return count > 0;
   }
 
-  async aggregate(table, pipeline) {
-    throw new Error("SQLDriver.aggregate() not implemented");
+  async aggregate(table, pipeline = []) {
+    throw new Error(
+      "SQLDriver.aggregate() is not implemented (not applicable to SQL)."
+    );
   }
 
-  async query(rawQuery, options) {
-    return this.db.raw(rawQuery, options?.bindings || []);
+  async query(rawQuery, options = {}) {
+    const { bindings = [] } = options;
+    return this.db.raw(rawQuery, bindings);
   }
+
+  // ---------------------------------------------------------------------------
+  // Transaction management
+  // ---------------------------------------------------------------------------
 
   async transaction(callback) {
     return await this.db.transaction(callback);

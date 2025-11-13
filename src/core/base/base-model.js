@@ -4,7 +4,6 @@
 
 import BaseClass from "./base-class.js";
 import Schema from "../utility/schema.js";
-import pluralize from "pluralize";
 
 // -----------------------------------------------------------------------------
 // Validation Error
@@ -26,16 +25,26 @@ export class ValidationError extends Error {
 // -----------------------------------------------------------------------------
 export default class BaseModel extends BaseClass {
   _driver;
+  _tableName;
   _schema;
   _data = {};
   _name;
 
-  constructor(driver, config = undefined) {
+  /**
+   * @param {object} driver - Database driver implementing required CRUD interface
+   * @param {string} tableName - Database table name (developer-defined)
+   * @param {Schema} schema - Pre-instantiated Schema object
+   * @param {object} [config={}] - Optional configuration for BaseClass
+   */
+  constructor(driver, tableName, schema, config = {}) {
     super(config);
 
+    // -------------------------------------------------------------------------
+    // Validate driver
+    // -------------------------------------------------------------------------
     if (!driver || typeof driver !== "object") {
       throw new Error(
-        `❌ Model requires a valid database driver instance (got ${typeof driver}).`
+        `❌ BaseModel requires a valid database driver instance (got ${typeof driver}).`
       );
     }
 
@@ -69,19 +78,36 @@ export default class BaseModel extends BaseClass {
       );
     }
 
+    // -------------------------------------------------------------------------
+    // Validate table name
+    // -------------------------------------------------------------------------
+    if (!tableName || typeof tableName !== "string") {
+      throw new Error(
+        `❌ BaseModel requires a valid table name (got ${typeof tableName}).`
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Validate schema
+    // -------------------------------------------------------------------------
+    if (!(schema instanceof Schema)) {
+      throw new Error(
+        `❌ BaseModel requires a valid Schema instance (got ${
+          schema?.constructor?.name ?? typeof schema
+        }).`
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Assign core properties
+    // -------------------------------------------------------------------------
     this._driver = driver;
-    this._schema = new Schema();
+    this._tableName = tableName;
+    this._schema = schema;
     this._name = this.constructor.modelName;
 
-    this.defineSchema(this._schema);
+    // Define reactive schema-backed properties
     this._definePropertiesFromSchema();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Abstract hooks
-  // ---------------------------------------------------------------------------
-  defineSchema(schema) {
-    this.requireOverride("defineSchema");
   }
 
   // ---------------------------------------------------------------------------
@@ -92,15 +118,6 @@ export default class BaseModel extends BaseClass {
     return ctorName.endsWith("Model") ? ctorName.slice(0, -5) : ctorName;
   }
 
-  static get tableName() {
-    const base = this.modelName;
-    const snake = base
-      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-      .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
-      .toLowerCase();
-    return pluralize(snake);
-  }
-
   // ---------------------------------------------------------------------------
   // Public getters
   // ---------------------------------------------------------------------------
@@ -108,7 +125,7 @@ export default class BaseModel extends BaseClass {
     return this._name;
   }
   get tableName() {
-    return this.constructor.tableName;
+    return this._tableName;
   }
   get schema() {
     return this._schema;
@@ -149,9 +166,11 @@ export default class BaseModel extends BaseClass {
   _setData(record) {
     this._data = { ...record };
   }
+
   toObject() {
     return { ...this._data };
   }
+
   toJSON() {
     return this.toObject();
   }
@@ -160,7 +179,7 @@ export default class BaseModel extends BaseClass {
   // Validation helpers
   // ---------------------------------------------------------------------------
   async _handleValidationAndExecute(method, entity, dbAction, options = {}) {
-    const results = this._schema.validate(entity, options);
+    const results = this.schema.validate(this._tableName, entity, options);
     if (!results.valid) {
       this._logValidationErrors(method, results.errors);
       throw new ValidationError(this.name, method, results.errors);
