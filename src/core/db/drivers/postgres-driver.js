@@ -1,6 +1,5 @@
 // postgres-driver.js
-// -----------------------------------------------------------------------------
-import verify from "../../utility/verify.js";
+
 import SQLDriver from "./sql-driver.js";
 import DriverRegistry from "../driver-registry.js";
 
@@ -27,6 +26,13 @@ export default class PostgresDriver extends SQLDriver {
       max: config.connectionLimit ?? 10,
       ssl: config.ssl ?? false,
     };
+
+    // Basic validation
+    if (!this.config.host || !this.config.user || !this.config.database) {
+      throw new Error(
+        "PostgresDriver requires `host`, `user`, and `database` in config"
+      );
+    }
   }
 
   /* =============================================================
@@ -37,31 +43,17 @@ export default class PostgresDriver extends SQLDriver {
   }
 
   /* =============================================================
-   * Configuration Validation
-   * ============================================================= */
-  verifyConfig(config) {
-    return verify(config)
-      .isString("host", true, 1, 255)
-      .isString("user", true, 1, 255)
-      .isString("password", false, 0, 255) // allow empty password
-      .isString("database", true, 1, 255)
-      .isInteger("port", true, 1, 65000, 5432);
-  }
-
-  /* =============================================================
    * Connection Management
    * ============================================================= */
   async connect() {
     if (this.pool) return;
-
-    await this.verifyConfig(this.config);
 
     const { Pool } = await import("pg");
     this.pgModule = { Pool };
 
     this.pool = new Pool(this.config);
 
-    // test connection immediately
+    // Test connection immediately
     const client = await this.pool.connect();
     client.release();
 
@@ -89,13 +81,15 @@ export default class PostgresDriver extends SQLDriver {
     if (!this.pool) throw new Error("PostgresDriver: Database not connected.");
 
     const executor = this.client || this.pool;
+
     try {
       const result = await executor.query(sql, params);
 
-      // Normalize rowCount for consistency with MySQL/MariaDB
+      // Normalize rowCount
       result.rows.rowCount =
         result.rowCount ??
         (Array.isArray(result.rows) ? result.rows.length : 0);
+
       return result.rows;
     } catch (err) {
       console.error(

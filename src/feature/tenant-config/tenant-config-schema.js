@@ -24,8 +24,8 @@ const TenantConfigSchema = new Schema()
   .addString("site_support_url", true, 1, 255)
   .addString("site_owner", true, 1, 255)
   .addString("site_author_name", true, 1, 255)
-  .addString("site_author_url", true, 1, 255);
-addInteger("site_copyright", true, 2025, 3000)
+  .addString("site_author_url", true, 1, 255)
+  .addInteger("site_copyright", true, 2025, 3000)
   .addEnum("site_roles", true, site_role_names, "Guest")
   .addString("postmark_api_key", true, 1, 255);
 

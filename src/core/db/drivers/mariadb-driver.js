@@ -1,7 +1,4 @@
-// mariadb-driver.js
-
 // -----------------------------------------------------------------------------
-import verify from "../../utility/verify.js";
 import SQLDriver from "./sql-driver.js";
 import DriverRegistry from "../driver-registry.js";
 
@@ -27,24 +24,10 @@ export default class MariaDBDriver extends SQLDriver {
   }
 
   /* =============================================================
-   * Configuration Validation
-   * ============================================================= */
-  verifyConfig(config) {
-    return verify(config)
-      .isString("host", true, 1, 255)
-      .isString("user", true, 1, 255)
-      .isString("password", true, 0, 255)
-      .isString("database", true, 1, 255)
-      .isInteger("port", true, 1, 65000, 3306);
-  }
-
-  /* =============================================================
    * Connection Management
    * ============================================================= */
   async connect() {
     if (this.pool) return;
-
-    await this.verifyConfig(this.config);
 
     const mariadb = await import("mariadb");
     this.mariadbModule = mariadb;
