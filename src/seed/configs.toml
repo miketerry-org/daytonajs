@@ -41,8 +41,8 @@ id = 1
 node = 1
 mode = "development"
 domain = "local.mercury"
-db_url = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-mercury-dev?tls=true&authSource=admin"
-log_collection_name = "logs"
+database_uri = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-mercury-dev?tls=true&authSource=admin"
+log_table_name = "logs"
 log_expiration_days = 90
 log_capped = false
 log_max_size = 10
@@ -67,7 +67,7 @@ id = 2
 node = 1
 mode = "testing"
 domain = "local.venus"
-db_url = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-venus-test?tls=true&authSource=admin"
+database_uri = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-venus-test?tls=true&authSource=admin"
 log_collection_name = "logs"
 log_expiration_days = 2
 log_capped = false
@@ -93,7 +93,7 @@ id = 3
 node = 1
 mode = "production"
 domain = "local.mars"
-db_url = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-mars-prod?tls=true&authSource=admin"
+database_uri = "mongodb+srv://doadmin:b3ly0s9C5V6v28m7@tworoads-one-node-db-92e22e66.mongo.ondigitalocean.com/local-mars-prod?tls=true&authSource=admin"
 log_collection_name = "logs"
 log_expiration_days = 2
 log_capped = false
