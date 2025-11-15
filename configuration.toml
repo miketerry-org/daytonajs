@@ -1,0 +1,109 @@
+# ============================================================
+# Server settings
+# ============================================================
+[server]
+id=1
+node_id=1
+http_port = 3000
+
+# --- Logging ---
+log_name = "logs"
+log_expiration_days = 1
+log_capped = false
+log_max_size = 10
+log_max_docs = 10000
+
+# --- Rate limiting ---
+rate_limit_minutes = 10
+rate_limit_requests = 200
+body_limit = "10kb"
+
+# --- Security ---
+session_secret = "2ab976ae98b6a83ca401a8dd15fefdc193c2d4702e56ea1d5efdea4174407d69"
+
+# --- Static + View paths ---
+static_path = "public"
+views_path = "views"
+views_default_layout = "default_layout.hbs"
+views_layouts_path = "views/layouts"
+views_partials_path = "views/partials"
+emails_templates_path = "emails"
+
+
+# ============================================================
+# Tenant settings
+# ============================================================
+
+[[tenants]]
+name = "development"
+node = 1
+mode = "development"
+domain = "local.dev"
+database_uri = "mongodb://localhost:27017/dev"
+log_table_name = "logs"
+log_expiration_days = 90
+log_capped = false
+log_max_size = 10
+log_max_docs = 10000
+site_title = "(development) Life Coaching"
+site_slogan = "Ret Hot Life Coaching"
+site_coach_fullname = "Donald Duck"
+site_coach_email = "donald.duck@mercurylifecoaching.com"
+site_support_email = "support@miketerry.org"
+site_support_url = "https://local.mercury/support"
+site_owner = "Mercury Life Coaching, LLC"
+site_author_name = "miketerry.org"
+site_author_url = "https://miketerry.org"
+site_copyright = 2025
+site_roles = ["Guest", "client", "coach", "admin"]
+postmark_api_key = "67d2044f-4927-47e0-8639-2859a1f97b97"
+
+
+[[tenants]]
+name = "Testing"
+node = 1
+mode = "testing"
+domain = "local.test"
+database_uri = "mongodb://localhost:27017/test"
+log_collection_name = "logs"
+log_expiration_days = 2
+log_capped = false
+log_max_size = 20
+log_max_docs = 20000
+site_title = "(Test) Life Coaching"
+site_slogan = "Quality, comprehensive life coaching for everyone"
+site_coach_fullname = "Dylan Terry"
+site_coach_email = "dylan.terry@tworoadsmovement.com"
+site_support_email = "support@tworoadsmovement.com"
+site_support_url = "https://www.tworoadsmovement.com/support"
+site_owner = "Two Roads Movement, LLC"
+site_author_name = "miketerry.org"
+site_author_url = "https://miketerry.org"
+site_copyright = 2025
+site_roles = ["Guest", "client", "coach", "admin"]
+postmark_api_key = "67d2044f-4927-47e0-8639-2859a1f97b97"
+
+
+[[tenants]]
+name = "Staging"
+node = 1
+mode = "staging
+domain = "local.stage"
+database_uri = "mongodb://localhost:27017/stage"
+log_collection_name = "logs"
+log_expiration_days = 2
+log_capped = false
+log_max_size = 20
+log_max_docs = 20000
+site_title = "Two Roads Movement"
+site_slogan = "Quality, comprehensive life coaching for everyone"
+site_coach_fullname = "Dylan Terry"
+site_coach_email = "dylan.terry@tworoadsmovement.com"
+site_support_email = "support@tworoadsmovement.com"
+site_support_url = "https://www.tworoadsmovement.com/support"
+site_owner = "Two Roads Movement, LLC"
+site_author_name = "miketerry.org"
+site_author_url = "https://miketerry.org"
+site_copyright = 2025
+site_roles = ["Guest", "client", "coach", "admin"]
+postmark_api_key = "67d2044f-4927-47e0-8639-2859a1f97b97"
