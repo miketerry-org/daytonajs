@@ -1,13 +1,16 @@
-// tenant-manager.js:
+// tenant-manager.js
+
+import Tenant from "./tenant.js";
 
 /**
  * Manages all tenant instances for the application.
  */
 export default class TenantManager {
-  #tenantList = [];
+  #tenantList;
 
-  constructor(tenantConfigList = []) {
-    tenantConfigList.forEach(cfg => {
+  constructor(tenants = []) {
+    this.#tenantList = [];
+    tenants.forEach(cfg => {
       this.#tenantList.push(new Tenant(cfg));
     });
   }

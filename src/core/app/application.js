@@ -2,8 +2,8 @@
 
 import fs from "fs";
 import path from "path";
-import * as TOML from "@iarna/toml";
 import BaseClass from "../base/base-class.js";
+import Config from "../utility/config.js";
 import TenantManager from "./tenant-manager.js";
 
 /**
@@ -16,32 +16,18 @@ export default class BaseApplication extends BaseClass {
   /**
    * @param {string} filename - Path to a TOML configuration file.
    */
-  constructor(filename) {
-    if (!filename || typeof filename !== "string") {
-      throw new Error("BaseApplication constructor requires a TOML filename.");
-    }
+  constructor(filename = "config.toml.secret") {
+    filename = path.resolve(filename);
+    console.log("filename", filename);
 
-    const resolved = path.resolve(filename);
-
-    if (!fs.existsSync(resolved)) {
-      throw new Error(`Configuration file not found: ${resolved}`);
-    }
-
-    const buffer = fs.readFileSync(resolved, "utf8");
-    const configs = TOML.parse(buffer);
-
-    if (!configs.server) {
-      throw new Error(
-        "The TOML configuration file must contain a [server] section."
-      );
-    }
+    // create a temporary config instance to get server and tenants
+    const temp = Config.createFromTOMLFile(filename);
 
     // Pass server config up to BaseClass
-    super(configs.server);
+    super(temp.server);
 
     // Initialize tenant system
-    const tenantList = Array.isArray(configs.tenants) ? configs.tenants : [];
-
+    const tenantList = Array.isArray(temp.tenants) ? temp.tenants : [];
     this.tenants = new TenantManager(tenantList);
   }
 

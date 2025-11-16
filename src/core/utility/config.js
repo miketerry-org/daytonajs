@@ -23,7 +23,7 @@ export default class Config {
     return new this().loadJSONFile(filename, encryptKey);
   }
 
-  static createFromTOMLfile(filename) {
+  static createFromTOMLFile(filename) {
     return new this().loadTOMLFile(filename, encryptKey);
   }
 
