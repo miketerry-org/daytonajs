@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "daytona-mvc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Daytona: The JavaScript MVC framework with batteries included. Build using convention over configuration.",
   "main": "index.js",
   "scripts": {
@@ -36,7 +36,6 @@
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "better-sqlite3": "^12.4.1",
-    "dotenv": "^17.2.3",
     "libsql": "^0.5.22",
     "method-override": "^3.0.0",
     "mysql2": "^3.15.3",

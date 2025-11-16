@@ -1,10 +1,8 @@
 // index.js:
 
-import dotenv from "dotenv";
-dotenv.config();
-
 // import these modules to export classes
-import BaseApplication from "./src/core/base/base-application.js";
+import Config from "./src/core/utility/config.js";
+import Application from "./src/core/app/application.js";
 import BaseClass from "./src/core/base/base-class.js";
 import BaseDriver from "./src/core/base/base-driver.js";
 import ActiveRecord from "./src/core/db/active-record.js";
@@ -19,7 +17,8 @@ import SqliteDriver from "./src/core/db/drivers/sqlite-driver.js";
 
 export {
   ActiveRecord,
-  BaseApplication,
+  Application,
+  Config,
   BaseClass,
   BaseDriver,
   TableDataGateway,

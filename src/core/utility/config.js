@@ -1,10 +1,10 @@
 // config.js:
 
-"use strict";
-
+import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import * as TOML from "@iarna/toml";
+import encryptKey from "./load-encrypt-key.js";
 
 const ALGORITHM = "aes-256-cbc";
 const IV_LENGTH = 16; // AES block size
@@ -15,15 +15,15 @@ const IV_LENGTH = 16; // AES block size
  * in multiple formats (ENV, JSON, TOML), or directly from a JavaScript object.
  */
 export default class Config {
-  static createFromEnvFile(filename, encryptKey = undefined) {
+  static createFromEnvFile(filename) {
     return new this().loadEnvFile(filename, encryptKey);
   }
 
-  static createFromJSONFile(filename, encryptKey = undefined) {
+  static createFromJSONFile(filename) {
     return new this().loadJSONFile(filename, encryptKey);
   }
 
-  static createFromTOMLfile(filename, encryptKey = undefined) {
+  static createFromTOMLfile(filename) {
     return new this().loadTOMLFile(filename, encryptKey);
   }
 
@@ -34,8 +34,6 @@ export default class Config {
   /**
    * Optional validation hook.
    * Override this in subclasses to perform schema or type validation.
-   * @param {Record<string, any>} values - Object of key-value pairs to validate.
-   * @throws {Error} If validation fails.
    */
   validate(values) {
     // Override in subclasses
@@ -45,12 +43,7 @@ export default class Config {
   // ENV file support
   // ----------------------
 
-  /**
-   * Load configuration values from a plain or encrypted `.env`-style file.
-   * @param {string} filename - Path to the environment file.
-   * @param {string|undefined} [encryptKey] - Optional encryption key (UTF-8 string).
-   */
-  loadEnvFile(filename, encryptKey = undefined) {
+  loadEnvFile(filename) {
     let fileContent = fs.readFileSync(filename);
 
     if (encryptKey) {
@@ -76,11 +69,6 @@ export default class Config {
     return this;
   }
 
-  /**
-   * Save current configuration as a `.env`-style file.
-   * @param {string} filename - Output file path.
-   * @param {string|undefined} [encryptKey] - Optional encryption key.
-   */
   saveEnvFile(filename, encryptKey = undefined) {
     const lines = Object.entries(this)
       .filter(([key, val]) => typeof val === "string")
@@ -98,11 +86,6 @@ export default class Config {
   // JSON file support
   // ----------------------
 
-  /**
-   * Load configuration from a plain or encrypted JSON file.
-   * @param {string} filename - Path to JSON file.
-   * @param {string|undefined} [encryptKey] - Optional encryption key.
-   */
   loadJSONFile(filename, encryptKey = undefined) {
     let fileContent = fs.readFileSync(filename);
 
@@ -125,11 +108,6 @@ export default class Config {
     return this;
   }
 
-  /**
-   * Save configuration to a JSON file.
-   * @param {string} filename - Output file path.
-   * @param {string|undefined} [encryptKey] - Optional encryption key.
-   */
   saveJSONFile(filename, encryptKey = undefined) {
     const jsonObj = {};
 
@@ -151,14 +129,16 @@ export default class Config {
   // TOML file support
   // ----------------------
 
-  /**
-   * Load configuration from a plain or encrypted TOML file.
-   * @param {string} filename - Path to TOML file.
-   * @param {string|undefined} [encryptKey] - Optional encryption key.
-   */
-  loadTOMLFile(filename, encryptKey = undefined) {
+  loadTOMLFile(filename) {
+    filename = path.resolve(process.cwd(), filename);
+    if (!fs.existsSync(filename)) {
+      throw new Error(`File not found! (${filename}) `);
+    }
+
+    // red the encrypted file buffer
     let fileContent = fs.readFileSync(filename);
 
+    // if there is an encryption key then user it
     if (encryptKey) {
       fileContent = this.decrypt(fileContent, encryptKey);
     }
@@ -179,11 +159,6 @@ export default class Config {
     return this;
   }
 
-  /**
-   * Save current config as TOML to a plain or encrypted file.
-   * @param {string} filename - Output file path.
-   * @param {string|undefined} [encryptKey] - Optional encryption key.
-   */
   saveTOMLFile(filename, encryptKey = undefined) {
     const tomlObj = {};
 
@@ -208,13 +183,13 @@ export default class Config {
 
   /**
    * Encrypt a data buffer using AES-256-CBC.
-   * @param {Buffer} data - Data to encrypt.
-   * @param {string} encryptKey - Encryption key (UTF-8 string).
-   * @returns {Buffer} Encrypted data (IV prepended).
    */
   encrypt(data, encryptKey) {
     const iv = crypto.randomBytes(IV_LENGTH);
-    const key = Buffer.from(encryptKey, "utf8");
+
+    // FIX: Use hex key, not UTF-8 text
+    const key = Buffer.from(encryptKey, "hex");
+
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
     return Buffer.concat([iv, encrypted]);
@@ -222,38 +197,22 @@ export default class Config {
 
   /**
    * Decrypt AES-256-CBC encrypted data.
-   * @param {Buffer} encryptedData - Data buffer (IV prepended).
-   * @param {string} encryptKey - Encryption key (UTF-8 string).
-   * @returns {Buffer} Decrypted data buffer.
    */
   decrypt(encryptedData, encryptKey) {
     const iv = encryptedData.slice(0, IV_LENGTH);
     const encryptedText = encryptedData.slice(IV_LENGTH);
-    const key = Buffer.from(encryptKey, "utf8");
+
+    // FIX: Use hex key, not UTF-8 text
+    const key = Buffer.from(encryptKey, "hex");
+
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     return Buffer.concat([decipher.update(encryptedText), decipher.final()]);
   }
 
   // ----------------------
-  // Object loading support (with merge/override)
+  // Object loader
   // ----------------------
 
-  /**
-   * Load or merge configuration values from a plain object.
-   * Each key/value pair is added to this instance. Existing keys can be overwritten
-   * depending on the `writable` flag.
-   *
-   * @param {Record<string, any>} [values={}] - Plain object containing configuration values.
-   * @param {boolean} [writable=false] - If true, allows overwriting existing keys.
-   * @throws {TypeError} If `values` is not a plain object.
-   * @throws {Error} If validation fails.
-   *
-   * @example
-   * const config = new Config();
-   * config.loadObject({ port: 3000, env: "dev" });
-   * config.loadObject({ debug: true }, false); // merges without overwriting
-   * config.loadObject({ port: 8080 }, true);   // overwrites existing port
-   */
   loadObject(values = {}, writable = false) {
     if (
       typeof values !== "object" ||
@@ -267,15 +226,13 @@ export default class Config {
       const alreadyExists = Object.prototype.hasOwnProperty.call(this, key);
 
       if (alreadyExists && !writable) {
-        // Skip if key already exists and overwriting is disabled
         continue;
       }
 
-      // Define or redefine property with merge/override support
       Object.defineProperty(this, key, {
         value,
-        writable, // user-specified write behavior
-        configurable: true, // allows redefinition in future calls
+        writable,
+        configurable: true,
         enumerable: true,
       });
     }
