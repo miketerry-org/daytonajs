@@ -1,37 +1,87 @@
-// application.js
+// application.js (ESM)
 
-import fs from "fs";
+import express from "express";
 import path from "path";
-import BaseClass from "../base/base-class.js";
-import Config from "../utility/config.js";
-import TenantManager from "./tenant-manager.js";
-import initExpress from "./initExpress.js";
+import fs from "fs/promises";
+import { pathToFileURL } from "url";
 
-/**
- * BaseApplication
- *
- * Loads configuration from a TOML file, makes it available via this.config,
- * and initializes tenant management.
- */
-export default class BaseApplication extends BaseClass {
+export default class Application {
+  constructor() {
+    this.app = express();
+  }
+
   /**
-   * @param {string} filename - Path to a TOML configuration file.
+   * Static async factory method.
+   * Creates an Application instance and automatically runs init().
+   * @returns {Promise<Application>} Fully initialized Application instance.
    */
-  constructor(filename = "config.toml.secret") {
-    filename = path.resolve(filename);
-    console.log("filename", filename);
+  static async create() {
+    const instance = new Application();
+    await instance.init();
+    return instance;
+  }
 
-    // create a temporary config instance to get server and tenants
-    const temp = Config.createFromTOMLFile(filename);
+  /**
+   * Initializes the application.
+   * Loads controllers automatically from the project root.
+   * @returns {Promise<express.Application>} The Express application instance.
+   */
+  async init() {
+    await this.#loadControllers(process.cwd());
+    return this.app;
+  }
 
-    // Pass server config up to BaseClass
-    super(temp.server);
+  /**
+   * Scans for and loads all controllers in the project.
+   * A controller must export a default class with a static route(app) method.
+   */
+  async #loadControllers(rootDir) {
+    const controllerFiles = await this.#scanForControllers(rootDir);
 
-    // Initialize tenant system
-    const tenantList = Array.isArray(temp.tenants) ? temp.tenants : [];
-    this.tenants = new TenantManager(tenantList);
+    for (const filePath of controllerFiles) {
+      try {
+        const moduleUrl = pathToFileURL(filePath).href;
+        const mod = await import(moduleUrl);
 
-    // call initialize express function
-    initExpress(this);
+        if (!mod.default || typeof mod.default.route !== "function") {
+          console.warn(
+            `⚠️ Skipped: ${filePath} (no default export with static route())`
+          );
+          continue;
+        }
+
+        // Register the controller
+        mod.default.route(this.app);
+        console.log(`Controller registered: ${filePath}`);
+      } catch (err) {
+        console.error(`❌ Failed to load controller: ${filePath}`, err);
+      }
+    }
+  }
+
+  /**
+   * Recursively scans directories for controller files.
+   * Matches files ending with "controller.js" or "controller.ts".
+   */
+  async #scanForControllers(dir) {
+    let results = [];
+
+    const items = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const item of items) {
+      const fullPath = path.join(dir, item.name);
+
+      if (item.isDirectory()) {
+        results = results.concat(await this.#scanForControllers(fullPath));
+      } else if (
+        item.isFile() &&
+        (item.name.endsWith("controller.js") ||
+          item.name.endsWith("controller.ts"))
+      ) {
+        results.push(fullPath);
+      }
+    }
+
+    return results;
   }
 }

@@ -1,9 +1,10 @@
-// env.js:
+// env.js
 
 /**
  * @fileoverview Environment configuration utility.
  * Loads and validates environment variables, normalizes NODE_ENV,
- * and provides safe accessors for environment-specific configuration.
+ * and provides safe accessors for environment-specific configuration,
+ * including optional debugging mode.
  */
 
 import msg from "./msg.js";
@@ -28,7 +29,6 @@ class Environment {
 
   /**
    * Normalizes the raw NODE_ENV and returns a canonical mode.
-   * Also updates `process.env.NODE_ENV` to the normalized value.
    * @returns {"production" | "staging" | "development" | "testing"}
    */
   get mode() {
@@ -73,10 +73,29 @@ class Environment {
   }
 
   /**
+   * DEBUG MODE
+   * Accepts: "true", "1", "debug", "yes"
+   * Any other value => false
+   * @returns {boolean}
+   */
+  get isDebug() {
+    const v = process.env.DEBUG?.toLowerCase().trim();
+    return ["1", "true", "yes", "debug"].includes(v);
+  }
+
+  /**
+   * Debug logger: prints only when debug mode is active.
+   * @param  {...any} args
+   */
+  debugLog(...args) {
+    if (this.isDebug) {
+      console.debug("[DEBUG]", ...args);
+    }
+  }
+
+  /**
    * Retrieves and validates the encryption key.
    * Must be a 64-character hexadecimal string.
-   * @throws {Error} If key is missing, invalid length, or invalid format.
-   * @returns {string} The validated encryption key.
    */
   get encryptKey() {
     const key = process.env.ENCRYPT_KEY;
@@ -91,8 +110,6 @@ class Environment {
 
   /**
    * Retrieves the appropriate database URI based on the environment.
-   * @throws {Error} If no valid URI is found for the current mode.
-   * @returns {string} The database connection string.
    */
   get databaseURI() {
     const envMap = {
@@ -112,9 +129,6 @@ class Environment {
 
   /**
    * Retrieves and validates the server node identifier.
-   * Must be an integer between 1 and 1000.
-   * @throws {Error} If invalid or missing.
-   * @returns {number} The validated server node number.
    */
   get serverNode() {
     const value = Number.parseInt(process.env.SERVER_NODE, 10);
