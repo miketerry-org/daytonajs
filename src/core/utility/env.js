@@ -6,13 +6,7 @@
  * and provides safe accessors for environment-specific configuration.
  */
 
-"use strict";
-
-import dotenv from "dotenv";
 import msg from "./msg.js";
-
-// Load environment variables from .env file
-dotenv.config();
 
 // Ensure NODE_ENV is defined early
 if (!process.env.NODE_ENV) {

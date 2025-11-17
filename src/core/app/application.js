@@ -5,6 +5,7 @@ import path from "path";
 import BaseClass from "../base/base-class.js";
 import Config from "../utility/config.js";
 import TenantManager from "./tenant-manager.js";
+import initExpress from "./initExpress.js";
 
 /**
  * BaseApplication
