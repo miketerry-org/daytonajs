@@ -30,17 +30,8 @@ export default class BaseApplication extends BaseClass {
     // Initialize tenant system
     const tenantList = Array.isArray(temp.tenants) ? temp.tenants : [];
     this.tenants = new TenantManager(tenantList);
-  }
 
-  /**
-   * App initialization lifecycle hook.
-   * Subclasses should override this.
-   */
-  async init() {
-    console.log("🧩 Initializing BaseApplication...");
-    console.log(
-      `Server config: ${this.config.log_name || "no log_name provided"}`
-    );
-    console.log(`Loaded ${this.tenants.count} tenant(s).`);
+    // call initialize express function
+    initExpress(this);
   }
 }

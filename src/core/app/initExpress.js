@@ -1,6 +1,5 @@
 // initExpress.js
 
-// import all necessary modules
 import env from "../utility/env.js";
 import express from "express";
 import compression from "compression";
@@ -11,6 +10,8 @@ import rateLimit from "express-rate-limit";
 import hpp from "hpp";
 import cookieParser from "cookie-parser";
 import session from "express-session";
+import connectRedis from "connect-redis";
+import { createClient } from "redis";
 
 /**
  * Disable X-Powered-By header
@@ -48,17 +49,42 @@ function initCookieParser(app) {
 }
 
 /**
- * Sessions
+ * Sessions (Redis-backed)
  */
-function initSession(app) {
+async function initSession(app) {
   const conf = app.config;
+  const RedisStore = connectRedis(session);
+
+  // Create Redis client
+  const redisClient = createClient({
+    socket: {
+      host: conf.redis_host || "127.0.0.1",
+      port: conf.redis_port || 6379,
+    },
+    password: conf.redis_password || undefined,
+  });
+
+  redisClient.on("error", err => {
+    console.error("[Redis Error]", err);
+  });
+
+  // Attempt connection
+  await redisClient.connect().catch(err => {
+    console.error("REDIS CONNECTION ERROR:", err);
+  });
+
+  const store = new RedisStore({
+    client: redisClient,
+    prefix: conf.redis_prefix || "sess:",
+  });
 
   const sessionOptions = {
+    store,
     secret: conf.session_secret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: !env.isDevelopment,
+      secure: !env.isDevelopment, // secure cookies in production only
       httpOnly: true,
       sameSite: "lax",
       maxAge: 1000 * 60 * 60 * 2, // 2 hours
@@ -117,7 +143,7 @@ function initStaticFiles(app) {
   if (app.config.static_root) {
     app.use(
       express.static(app.config.static_root, {
-        maxAge: 31536000000,
+        maxAge: 31536000000, // 1 year
         immutable: true,
       })
     );
@@ -161,13 +187,13 @@ function initShutdown(app) {
 
 /**
  * Main initializer
- *
- * @param {object} config - Application config
- * @param {object} system - System flags { isDevelopment: true/false }
- * @param {object} middlewares - Optional middleware bag
- * @param {function} close - Optional closing function
  */
-export default function initExpress({ config, system, middlewares, close }) {
+export default async function initExpress({
+  config,
+  system,
+  middlewares,
+  close,
+}) {
   const app = express();
 
   // attach objects onto app
@@ -181,7 +207,7 @@ export default function initExpress({ config, system, middlewares, close }) {
   initSecurity(app);
   initCompression(app);
   initCookieParser(app);
-  initSession(app);
+  await initSession(app); // <— must await Redis connection
   initRateLimit(app);
   initRequestLogger(app);
   initResponseLogger(app);
