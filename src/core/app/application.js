@@ -2,13 +2,12 @@
 
 import ConfigLoader from "./config-loader.js";
 import initExpress from "./init-express.js";
+import ControllerLoader from "./controller-loader.js";
+import tenantMiddleware from "./tenant-middleware.js";
 
 export default class Application {
-  static instance = null;
+  static instance;
 
-  /**
-   * Factory method for creating the Application singleton.
-   */
   static create() {
     if (!this.instance) {
       this.instance = new Application();
@@ -17,55 +16,36 @@ export default class Application {
   }
 
   constructor() {
-    // Load configuration automatically
-    const loader = new ConfigLoader();
-    this.config = loader.getConfig();
+    if (Application.instance) return Application.instance;
 
-    // Internal structures
-    this.middlewares = []; // array of middleware functions
-    this.tenants = this.config.tenants || [];
-    this.serverConfig = this.config.server || {};
+    this.config = this.#loadConfig();
+    this.controllers = this.#loadControllers();
+    this.app = this.#initExpress();
 
-    // Express app instance (initialized later)
-    this.app = null;
-
-    // Initialize express with config and middlewares
-    this.initExpress();
+    Application.instance = this;
   }
 
-  /**
-   * Register a middleware function to be applied to Express
-   * Must be done before initExpress runs.
-   */
-  use(middlewareFn) {
-    if (typeof middlewareFn !== "function") {
-      throw new TypeError("Middleware must be a function");
-    }
-    this.middlewares.push(middlewareFn);
+  #loadConfig() {
+    const key = process.env.CONFIG_KEY;
+    if (!key) throw new Error("CONFIG_KEY environment variable required");
+    const loader = new ConfigLoader("config.toml.secret", key);
+    return loader.load();
   }
 
-  /**
-   * Initialize the Express app via initExpress()
-   */
-  initExpress() {
-    if (this.app) return; // prevent double initialization
-
-    const options = {
-      middlewares: this.middlewares,
-      tenants: this.tenants,
-      serverConfig: this.serverConfig,
-    };
-
-    this.app = initExpress(this.config, options);
+  #loadControllers() {
+    const loader = new ControllerLoader();
+    return loader.load();
   }
 
-  /**
-   * Get Express app
-   */
-  getApp() {
-    if (!this.app) {
-      throw new Error("Express app is not initialized");
-    }
-    return this.app;
+  #initExpress() {
+    const middlewares = [
+      tenantMiddleware(this.config.tenants), // tenant middleware first
+      ...(this.config.middlewares || []), // additional middlewares if any
+    ];
+
+    return initExpress({
+      middlewares,
+      routers: this.controllers,
+    });
   }
 }

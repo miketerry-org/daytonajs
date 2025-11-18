@@ -1,56 +1,51 @@
+// config-loader.js
+
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 import * as TOML from "@iarna/toml";
+import crypto from "crypto";
 
-const ALGORITHM = "aes-256-cbc";
 const IV_LENGTH = 16;
+const ALGORITHM = "aes-256-cbc";
 
-// Load and decrypt config.toml.secret
+// Read encrypted TOML file and parse
 export default class ConfigLoader {
-  constructor(
-    filename = "config.toml.secret",
-    encryptKey = process.env.CONFIG_KEY
-  ) {
-    this.filename = path.resolve(process.cwd(), filename);
-    this.encryptKey = encryptKey;
-
-    if (!fs.existsSync(this.filename)) {
-      throw new Error(`Configuration file not found: ${this.filename}`);
+  constructor(file = "config.toml.secret", key) {
+    this.file = path.resolve(process.cwd(), file);
+    this.key = key;
+    if (!fs.existsSync(this.file)) {
+      throw new Error(`${this.file} not found`);
     }
-
-    if (!this.encryptKey) {
-      throw new Error(
-        "Missing CONFIG_KEY environment variable for decrypting config"
-      );
-    }
-
-    this.config = this.load();
   }
 
   load() {
-    const fileContent = fs.readFileSync(this.filename);
-    const decrypted = this.decrypt(fileContent, this.encryptKey);
-    return TOML.parse(decrypted.toString("utf8"));
+    const encrypted = fs.readFileSync(this.file);
+    const decrypted = this.#decrypt(encrypted);
+    const config = TOML.parse(decrypted.toString("utf8"));
+
+    // Simple verification
+    if (!config.server || !config.tenants) {
+      throw new Error("Invalid config: missing server or tenants");
+    }
+
+    // Normalize tenant domains
+    config.tenants = config.tenants.map(t => ({
+      ...t,
+      domain: t.domain.toLowerCase(),
+    }));
+
+    return config;
   }
 
-  decrypt(encryptedData, keyHex) {
-    const iv = encryptedData.slice(0, IV_LENGTH);
-    const encryptedText = encryptedData.slice(IV_LENGTH);
-    const key = Buffer.from(keyHex, "hex");
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    return Buffer.concat([decipher.update(encryptedText), decipher.final()]);
-  }
-
-  get server() {
-    return this.config.server || {};
-  }
-
-  get tenants() {
-    return this.config.tenants || [];
-  }
-
-  get fullConfig() {
-    return this.config;
+  #decrypt(encrypted) {
+    if (!this.key) throw new Error("Encryption key required for config");
+    const iv = encrypted.slice(0, IV_LENGTH);
+    const content = encrypted.slice(IV_LENGTH);
+    const decipher = crypto.createDecipheriv(
+      ALGORITHM,
+      Buffer.from(this.key, "hex"),
+      iv
+    );
+    return Buffer.concat([decipher.update(content), decipher.final()]);
   }
 }

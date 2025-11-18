@@ -1,19 +1,20 @@
 // init-express.js
+
 import express from "express";
 
-export default function initExpress(config, options = {}) {
+export default function initExpress({ middlewares = [], routers = [] } = {}) {
   const app = express();
 
-  // Apply middlewares if any
-  if (Array.isArray(options.middlewares)) {
-    options.middlewares.forEach(mw => app.use(mw));
-  }
+  // Apply middlewares
+  middlewares.forEach(mw => app.use(mw));
 
-  // Example: attach tenants and serverConfig to app.locals
-  app.locals.tenants = options.tenants || [];
-  app.locals.serverConfig = options.serverConfig || {};
+  // Apply routers
+  routers.forEach(({ path, router }) => {
+    app.use(path, router);
+  });
 
-  // More setup based on config...
+  // Catch-all 404
+  app.use((req, res) => res.status(404).send("Not found"));
 
   return app;
 }
