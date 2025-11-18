@@ -1,87 +1,71 @@
-// application.js (ESM)
+// application.js
 
-import express from "express";
-import path from "path";
-import fs from "fs/promises";
-import { pathToFileURL } from "url";
+import ConfigLoader from "./config-loader.js";
+import initExpress from "./init-express.js";
 
 export default class Application {
+  static instance = null;
+
+  /**
+   * Factory method for creating the Application singleton.
+   */
+  static create() {
+    if (!this.instance) {
+      this.instance = new Application();
+    }
+    return this.instance;
+  }
+
   constructor() {
-    this.app = express();
+    // Load configuration automatically
+    const loader = new ConfigLoader();
+    this.config = loader.getConfig();
+
+    // Internal structures
+    this.middlewares = []; // array of middleware functions
+    this.tenants = this.config.tenants || [];
+    this.serverConfig = this.config.server || {};
+
+    // Express app instance (initialized later)
+    this.app = null;
+
+    // Initialize express with config and middlewares
+    this.initExpress();
   }
 
   /**
-   * Static async factory method.
-   * Creates an Application instance and automatically runs init().
-   * @returns {Promise<Application>} Fully initialized Application instance.
+   * Register a middleware function to be applied to Express
+   * Must be done before initExpress runs.
    */
-  static async create() {
-    const instance = new Application();
-    await instance.init();
-    return instance;
+  use(middlewareFn) {
+    if (typeof middlewareFn !== "function") {
+      throw new TypeError("Middleware must be a function");
+    }
+    this.middlewares.push(middlewareFn);
   }
 
   /**
-   * Initializes the application.
-   * Loads controllers automatically from the project root.
-   * @returns {Promise<express.Application>} The Express application instance.
+   * Initialize the Express app via initExpress()
    */
-  async init() {
-    await this.#loadControllers(process.cwd());
+  initExpress() {
+    if (this.app) return; // prevent double initialization
+
+    const options = {
+      middlewares: this.middlewares,
+      tenants: this.tenants,
+      serverConfig: this.serverConfig,
+    };
+
+    this.app = initExpress(this.config, options);
+  }
+
+  /**
+   * Get Express app
+   */
+  getApp() {
+    if (!this.app) {
+      throw new Error("Express app is not initialized");
+    }
     return this.app;
-  }
-
-  /**
-   * Scans for and loads all controllers in the project.
-   * A controller must export a default class with a static route(app) method.
-   */
-  async #loadControllers(rootDir) {
-    const controllerFiles = await this.#scanForControllers(rootDir);
-
-    for (const filePath of controllerFiles) {
-      try {
-        const moduleUrl = pathToFileURL(filePath).href;
-        const mod = await import(moduleUrl);
-
-        if (!mod.default || typeof mod.default.route !== "function") {
-          console.warn(
-            `⚠️ Skipped: ${filePath} (no default export with static route())`
-          );
-          continue;
-        }
-
-        // Register the controller
-        mod.default.route(this.app);
-        console.log(`Controller registered: ${filePath}`);
-      } catch (err) {
-        console.error(`❌ Failed to load controller: ${filePath}`, err);
-      }
-    }
-  }
-
-  /**
-   * Recursively scans directories for controller files.
-   * Matches files ending with "controller.js" or "controller.ts".
-   */
-  async #scanForControllers(dir) {
-    let results = [];
-
-    const items = await fs.readdir(dir, { withFileTypes: true });
-
-    for (const item of items) {
-      const fullPath = path.join(dir, item.name);
-
-      if (item.isDirectory()) {
-        results = results.concat(await this.#scanForControllers(fullPath));
-      } else if (
-        item.isFile() &&
-        (item.name.endsWith("controller.js") ||
-          item.name.endsWith("controller.ts"))
-      ) {
-        results.push(fullPath);
-      }
-    }
-
-    return results;
   }
 }
