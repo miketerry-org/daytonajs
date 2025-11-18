@@ -7,7 +7,7 @@ import DriverRegistry from "./driver-registry.js";
 import PostgresDriver from "./drivers/postgres-driver.js";
 import MySQLDriver from "./drivers/mysql-driver.js";
 import MariaDBDriver from "./drivers/mariadb-driver.js";
-import SQLiteDriver from "./drivers/better-sqlite3-driver.js";
+import BetterSQLiteDriver from "./drivers/better-sqlite-driver.js";
 import LibSQLDriver from "./drivers/libsql-driver.js";
 import MongoDriver from "./drivers/mongodb-driver.js";
 

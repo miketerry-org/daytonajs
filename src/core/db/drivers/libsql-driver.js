@@ -8,7 +8,7 @@ import DriverRegistry from "../driver-registry.js";
  *
  * Implements SQLDriver using @libsql/client (works with local SQLite or remote Turso).
  */
-export default class SQLiteDriver extends SQLDriver {
+export default class LibSqlDriver extends SQLDriver {
   constructor(config = {}) {
     super(config);
 
@@ -133,4 +133,4 @@ export default class SQLiteDriver extends SQLDriver {
 }
 
 // Register SQLite driver globally
-DriverRegistry.add("sqlite", SQLiteDriver);
+DriverRegistry.add("libsql", LibSqlDriver);

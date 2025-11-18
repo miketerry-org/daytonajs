@@ -1,4 +1,4 @@
-// sqlite-driver.js:
+// better-sqlite-driver.js:
 
 import SQLDriver from "./sql-driver.js";
 import DriverRegistry from "../driver-registry.js";
@@ -9,7 +9,7 @@ import Database from "better-sqlite3";
  *
  * Implements SQLDriver using better-sqlite3 (local SQLite engine, no server required).
  */
-export default class SQLiteDriver extends SQLDriver {
+export default class BetterSqliteDriver extends SQLDriver {
   constructor(config = {}) {
     super(config);
 
@@ -125,5 +125,5 @@ export default class SQLiteDriver extends SQLDriver {
   }
 }
 
+DriverRegistry.add("better-sqlite", BetterSqliteDriver);
 // Register SQLite driver globally
-DriverRegistry.add("sqlite", SQLiteDriver);
