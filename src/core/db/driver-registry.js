@@ -1,7 +1,5 @@
 // driver-registry.js
 
-"use strict";
-
 export default class DriverRegistry {
   // Private static Map to hold all registered drivers
   static #drivers = new Map();

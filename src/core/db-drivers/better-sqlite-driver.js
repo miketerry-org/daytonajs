@@ -1,7 +1,6 @@
 // better-sqlite-driver.js:
 
 import SQLDriver from "./sql-driver.js";
-import DriverRegistry from "../driver-registry.js";
 import Database from "better-sqlite3";
 
 /**
@@ -16,7 +15,7 @@ export default class BetterSqliteDriver extends SQLDriver {
     this.db = null;
 
     this.config = {
-      url: config.url, // e.g., ./data/app.db or :memory:
+      url: config.database_url, // e.g., ./data/app.db or :memory:
     };
 
     if (!this.config.url) {
@@ -30,7 +29,7 @@ export default class BetterSqliteDriver extends SQLDriver {
    * Driver Identity
    * ============================================================= */
   static driverName() {
-    return "sqlite";
+    return "better-sqlite";
   }
 
   /* =============================================================
@@ -124,6 +123,3 @@ export default class BetterSqliteDriver extends SQLDriver {
     return logicalKey;
   }
 }
-
-DriverRegistry.add("better-sqlite", BetterSqliteDriver);
-// Register SQLite driver globally

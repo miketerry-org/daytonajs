@@ -3,21 +3,19 @@
 import initExpress from "./init-express.js";
 import ConfigLoader from "./loaders/config-loader.js";
 import ControllerLoader from "./loaders/controller-loader.js";
+import DriverLoader from "./loaders/driver-loader.js";
 import MiddlewareLoader from "./loaders/middleware-loader.js";
-
-import { registerDefaultDrivers } from "../db/driver-bootstrap.js";
-import DriverRegistry from "../db/driver-registry.js";
 
 export default class Application {
   constructor() {
     this.config = null; // Loaded from config.toml.secret
-    this.tenants = []; // Array of tenant objects
-    this.controllers = []; // Controllers loaded from filesystem
-    this.app = null; // Express instance
+    this.tenants = []; // Tenant definitions from config
+    this.controllers = []; // Loaded controllers (path + router)
+    this.app = null; // Final Express instance
   }
 
   /**
-   * Main factory method
+   * Factory creator
    */
   static async create() {
     const app = new Application();
@@ -26,35 +24,32 @@ export default class Application {
   }
 
   /**
-   * Core initialization sequence
+   * Core boot sequence
    */
   async #initialize() {
-    // 1️⃣ Load configuration
+    // 1️⃣ Load project config
     this.config = await this.#loadConfig();
     this.tenants = this.config.tenants || [];
 
-    // 2️⃣ Register built-in DB drivers first
-    registerDefaultDrivers();
+    // 2️⃣ Auto-discover database drivers (framework → app)
+    await this.#loadDatabaseDrivers();
 
-    // 3️⃣ Allow subclass overrides (optional)
-    await this.addCustomDBDrivers(DriverRegistry);
-
-    // 4️⃣ Load controllers
+    // 3️⃣ Discover controllers (framework → app)
     this.controllers = await this.#loadControllers();
 
-    // 5️⃣ Auto-load middlewares (framework first, then app)
+    // 4️⃣ Auto-discover middlewares (framework → app)
     const autoMiddlewares = await this.#loadMiddlewares();
 
-    // 6️⃣ Build final middleware chain
+    // 5️⃣ Merge config middlewares
     const allMiddlewares = [
-      ...autoMiddlewares, // Auto-discovered filesystem middleware
-      ...(this.config.middlewares || []), // Config-defined middlewares
+      ...autoMiddlewares,
+      ...(this.config.middlewares || []),
     ];
 
-    // 7️⃣ Debug logging
+    // 6️⃣ Debug output
     this.#debugListMiddlewares(allMiddlewares);
 
-    // 8️⃣ Create Express app
+    // 7️⃣ Build Express app
     try {
       this.app = await initExpress({
         config: this.config,
@@ -68,38 +63,39 @@ export default class Application {
   }
 
   /**
-   * Load and decrypt config.toml.secret using ConfigLoader
+   * Load config.toml.secret via the ConfigLoader
    */
   async #loadConfig() {
     const loader = new ConfigLoader();
-    return await loader.load(); // Always loads project-root/config.toml.secret
+    return await loader.load();
   }
 
   /**
-   * Override in subclasses to add custom DB drivers
+   * Auto-discovers DB drivers via DriverLoader
    */
-  async addCustomDBDrivers(registry) {
-    // no-op by default
+  async #loadDatabaseDrivers() {
+    const loader = new DriverLoader();
+    await loader.load(); // registers everything into DriverRegistry
   }
 
   /**
-   * Uses ControllerLoader to scan controllers
+   * Auto-discover controllers
    */
   async #loadControllers() {
     const loader = new ControllerLoader();
-    return loader.load(); // Framework first, then app
+    return loader.load();
   }
 
   /**
-   * Uses MiddlewareLoader to scan "*-middleware.js/ts" (framework + app)
+   * Auto-discover middlewares
    */
   async #loadMiddlewares() {
     const loader = new MiddlewareLoader();
-    return loader.load(); // Make sure loader is updated to support framework + app
+    return loader.load();
   }
 
   /**
-   * Debug logging of middleware order
+   * Debug print middleware order
    */
   #debugListMiddlewares(allMiddlewares) {
     if (!this.config.debug) return;

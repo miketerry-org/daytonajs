@@ -1,7 +1,6 @@
 // libsql-driver.js:
 
 import SQLDriver from "./sql-driver.js";
-import DriverRegistry from "../driver-registry.js";
 
 /**
  * SQLiteDriver (Turso-compatible)
@@ -31,7 +30,7 @@ export default class LibSqlDriver extends SQLDriver {
    * Driver Identity
    * ============================================================= */
   static driverName() {
-    return "sqlite";
+    return "libsql-sqlite";
   }
 
   /* =============================================================
@@ -131,6 +130,3 @@ export default class LibSqlDriver extends SQLDriver {
     return logicalKey;
   }
 }
-
-// Register SQLite driver globally
-DriverRegistry.add("libsql", LibSqlDriver);

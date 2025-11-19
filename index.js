@@ -2,7 +2,6 @@
 
 // import these modules to export classes
 import env from "./src/core/utility/env.js";
-// import Config from "./src/core/utility/config.js";
 import Application from "./src/core/app/application.js";
 import BaseClass from "./src/core/base/base-class.js";
 import BaseController from "./src/core/base/base-controller.js";
@@ -10,18 +9,9 @@ import BaseDriver from "./src/core/base/base-driver.js";
 import ActiveRecord from "./src/core/db/active-record.js";
 import TableDataGateway from "./src/core/db/table-data-gateway.js";
 
-// import these modules to cause automatic registration of database drivers
-import MariaDBDriver from "./src/core/db/drivers/mariadb-driver.js";
-import MongoDBDriver from "./src/core/db/drivers/mongodb-driver.js";
-import MySqlDriver from "./src/core/db/drivers/mysql-driver.js";
-import PostgresDriver from "./src/core/db/drivers/postgres-driver.js";
-import BetterSqliteDriver from "./src/core/db/drivers/better-sqlite-driver.js";
-import LibSqlDriver from "./src/core/db/drivers/libsql-driver.js";
-
 export {
   ActiveRecord,
   Application,
-  // Config,
   env,
   BaseClass,
   BaseController,

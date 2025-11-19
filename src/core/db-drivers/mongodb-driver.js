@@ -24,6 +24,10 @@ export default class MongoDBDriver extends BaseDriver {
       : this._client.db();
   }
 
+  static driverName() {
+    return "mongodb";
+  }
+
   // ---------------------------------------------------------------------------
   // Connection management
   // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 // sql-driver.js:
 
-import BaseDriver from "../../base//base-driver.js";
+import BaseDriver from "../base//base-driver.js";
 
 export default class SQLDriver extends BaseDriver {
   constructor(dbClient) {

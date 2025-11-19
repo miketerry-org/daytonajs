@@ -5,6 +5,12 @@ export default class BaseDriver {
     this._ensuredIndexes = new Set();
   }
 
+  static driverName() {
+    throw new Error(
+      `"${this.constructor.name}.driverName" method must be overridden!`
+    );
+  }
+
   ensureIndexes(tableName, schema) {
     if (this._ensuredIndexes.has(tableName)) return;
     const indexes = schema.getIndexes?.();
