@@ -3,7 +3,7 @@
 import fs from "fs";
 import path from "path";
 import express from "express";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL as nodePathToFileURL } from "url";
 
 /**
  * Resolve framework root (root of daytona-mvc package)
@@ -19,6 +19,7 @@ const appRoot = process.cwd();
 export default class ControllerLoader {
   constructor() {
     this.controllers = new Map(); // key = basePath, value = router
+    this.loadedControllers = []; // list of successfully loaded controllers/routes
   }
 
   /**
@@ -31,6 +32,15 @@ export default class ControllerLoader {
 
     // 2. Load application controllers
     await this.#scanFolder(appRoot, false);
+
+    // Print loaded controllers summary (single logging)
+    if (this.loadedControllers.length > 0) {
+      console.log("\n✅ Loaded controllers:");
+      this.loadedControllers.forEach(c => {
+        console.log(` • Route: ${c.basePath}  (${c.origin}: ${c.file})`);
+      });
+      console.log("─────────────────────────────────────────────\n");
+    }
 
     // Return as array: [ { path, router }, ... ]
     return [...this.controllers.entries()].map(([path, router]) => ({
@@ -66,7 +76,7 @@ export default class ControllerLoader {
    */
   async #loadController(fullPath, isFramework) {
     try {
-      const mod = await import(pathToFileURL(fullPath).href);
+      const mod = await import(nodePathToFileURL(fullPath).href);
       const Controller = mod.default;
 
       if (!Controller || typeof Controller.route !== "function") {
@@ -94,11 +104,12 @@ export default class ControllerLoader {
 
       this.controllers.set(basePath, router);
 
-      console.log(
-        `Controller loaded: ${basePath}  (${
-          isFramework ? "framework" : "app"
-        }: ${fullPath})`
-      );
+      // Store for summary only
+      this.loadedControllers.push({
+        basePath,
+        file: fullPath,
+        origin: isFramework ? "framework" : "app",
+      });
     } catch (err) {
       console.error(`❌ Failed to load controller: ${fullPath}`);
       console.error(err);
@@ -135,15 +146,4 @@ export default class ControllerLoader {
 
     return router;
   }
-}
-
-/**
- * Convert a filesystem path to a file:// URL for ESM import
- */
-function pathToFileURL(filepath) {
-  return pathToFileURLInternal(filepath).href;
-}
-
-function pathToFileURLInternal(filepath) {
-  return new URL(`file://${path.resolve(filepath)}`);
 }
