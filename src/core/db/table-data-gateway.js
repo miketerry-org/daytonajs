@@ -1,139 +1,119 @@
 // -----------------------------------------------------------------------------
-// table-data-gateway.js
+// table-data-gateway.js (Driver-API–corrected)
 // -----------------------------------------------------------------------------
 
-import BaseModel, { ValidationError } from "../base/base-model.js";
+import BaseModel from "../base/base-model.js";
 
 export default class TableDataGateway extends BaseModel {
   constructor(driver, tableName, schema, config = {}) {
     super(driver, tableName, schema, config);
-    // No need to redefine _driver/_tableName/_schema here because BaseModel already does it
   }
 
-  // ---------------------------------------------------------------------------
-  // Query methods
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
+  // QUERIES
+  // ------------------------------------------------------------
   async findById(id, options = {}) {
     return this._driver.findById(this._tableName, id, options);
   }
 
-  async findMany(filters = {}, options = {}) {
-    return this._driver.findMany(this._tableName, filters, options);
+  async findMany(where = {}, options = {}) {
+    return this._driver.findMany(this._tableName, where, options);
   }
 
-  async count(filters = {}, options = {}) {
-    return this._driver.count(this._tableName, filters, options);
+  async count(where = {}, options = {}) {
+    return this._driver.count(this._tableName, where, options);
   }
 
-  async exists(filters = {}, options = {}) {
-    return this._driver.exists(this._tableName, filters, options);
+  async exists(where = {}, options = {}) {
+    return this._driver.exists(this._tableName, where, options);
   }
 
   async aggregate(pipeline = [], options = {}) {
     return this._driver.aggregate(this._tableName, pipeline, options);
   }
 
-  async query(queryString, params = [], options = {}) {
-    return this._driver.query(this._tableName, queryString, params, options);
+  async query(rawQuery, options = {}) {
+    return this._driver.query(rawQuery, options);
   }
 
-  // ---------------------------------------------------------------------------
-  // Insert / Upsert
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
+  // INSERT / UPSERT
+  // ------------------------------------------------------------
   async insertOne(record, options = {}) {
-    return super._handleValidationAndExecute(
-      "insertOne",
-      record,
-      validData => this._driver.insertOne(this._tableName, validData, options),
-      options
+    return this._handleValidationAndExecute("insertOne", record, valid =>
+      this._driver.insertOne(this._tableName, valid, options)
     );
   }
 
   async insertMany(records = [], options = {}) {
-    return Promise.all(
-      records.map(record =>
-        super._handleValidationAndExecute(
-          "insertMany",
-          record,
-          validData =>
-            this._driver.insertOne(this._tableName, validData, options),
-          options
-        )
-      )
-    );
+    const validated = [];
+    for (const r of records) {
+      const res = this._schema.validate(this._tableName, r, options);
+      if (!res.valid)
+        throw new ValidationError(this.name, "insertMany", res.errors);
+      validated.push(res.value);
+    }
+    return this._driver.insertMany(this._tableName, validated, options);
   }
 
   async upsert(record, options = {}) {
-    return super._handleValidationAndExecute(
-      "upsert",
-      record,
-      validData => this._driver.upsert(this._tableName, validData, options),
-      options
+    return this._handleValidationAndExecute("upsert", record, valid =>
+      this._driver.upsert(this._tableName, valid, options)
     );
   }
 
   async upsertMany(records = [], options = {}) {
-    return Promise.all(
-      records.map(record =>
-        super._handleValidationAndExecute(
-          "upsertMany",
-          record,
-          validData => this._driver.upsert(this._tableName, validData, options),
-          options
-        )
-      )
+    const validated = [];
+    for (const r of records) {
+      const res = this._schema.validate(this._tableName, r, options);
+      if (!res.valid)
+        throw new ValidationError(this.name, "upsertMany", res.errors);
+      validated.push(res.value);
+    }
+    return this._driver.upsertMany(this._tableName, validated, options);
+  }
+
+  // ------------------------------------------------------------
+  // UPDATE
+  // ------------------------------------------------------------
+  async updateOne(record, options = {}) {
+    if (!record?.id) throw new Error("updateOne requires data with an ID.");
+    return this._handleValidationAndExecute("updateOne", record, valid =>
+      this._driver.updateOne(this._tableName, valid, options)
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Update
-  // ---------------------------------------------------------------------------
-  async updateOne(id, record, options = {}) {
-    return super._handleValidationAndExecute(
-      "updateOne",
-      record,
-      validData =>
-        this._driver.updateOne(this._tableName, id, validData, options),
-      options
+  async updateMany(where, record, options = {}) {
+    return this._handleValidationAndExecute("updateMany", record, valid =>
+      this._driver.updateMany(this._tableName, valid, where)
     );
   }
 
-  async updateMany(filters, record, options = {}) {
-    return super._handleValidationAndExecute(
-      "updateMany",
-      record,
-      validData =>
-        this._driver.updateMany(this._tableName, filters, validData, options),
-      options
-    );
+  // ------------------------------------------------------------
+  // DELETE
+  // ------------------------------------------------------------
+  async deleteOne(idOrWhere, options = {}) {
+    const where = typeof idOrWhere === "object" ? idOrWhere : { id: idOrWhere };
+    return this._driver.deleteOne(this._tableName, where, options);
   }
 
-  // ---------------------------------------------------------------------------
-  // Delete
-  // ---------------------------------------------------------------------------
-  async deleteOne(id, options = {}) {
-    return this._driver.deleteOne(this._tableName, id, options);
+  async deleteMany(where, options = {}) {
+    return this._driver.deleteMany(this._tableName, where, options);
   }
 
-  async deleteMany(filters, options = {}) {
-    return this._driver.deleteMany(this._tableName, filters, options);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Transactions
-  // ---------------------------------------------------------------------------
-  async transaction(actions = []) {
-    return this._driver.transaction(this._tableName, actions);
+  // ------------------------------------------------------------
+  // TRANSACTIONS
+  // ------------------------------------------------------------
+  async transaction(callback) {
+    return this._driver.transaction(callback);
   }
 
   async startTransaction() {
     return this._driver.startTransaction();
   }
-
   async commitTransaction() {
     return this._driver.commitTransaction();
   }
-
   async rollbackTransaction() {
     return this._driver.rollbackTransaction();
   }

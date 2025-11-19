@@ -1,13 +1,10 @@
 // -----------------------------------------------------------------------------
-// base-model.js
+// base-model.js (Driver-API–corrected)
 // -----------------------------------------------------------------------------
 
 import BaseClass from "./base-class.js";
 import Schema from "../utility/schema.js";
 
-// -----------------------------------------------------------------------------
-// Validation Error
-// -----------------------------------------------------------------------------
 export class ValidationError extends Error {
   constructor(model, method, errors = []) {
     super(
@@ -20,9 +17,6 @@ export class ValidationError extends Error {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Base Model (shared foundation)
-// -----------------------------------------------------------------------------
 export default class BaseModel extends BaseClass {
   _driver;
   _tableName;
@@ -30,24 +24,16 @@ export default class BaseModel extends BaseClass {
   _data = {};
   _name;
 
-  /**
-   * @param {object} driver - Database driver implementing required CRUD interface
-   * @param {string} tableName - Database table name (developer-defined)
-   * @param {Schema} schema - Pre-instantiated Schema object
-   * @param {object} [config={}] - Optional configuration for BaseClass
-   */
   constructor(driver, tableName, schema, config = {}) {
     super(config);
 
-    // -------------------------------------------------------------------------
-    // Validate driver
-    // -------------------------------------------------------------------------
     if (!driver || typeof driver !== "object") {
       throw new Error(
-        `❌ BaseModel requires a valid database driver instance (got ${typeof driver}).`
+        `❌ BaseModel requires a valid database driver instance.`
       );
     }
 
+    // DRIVER API VALIDATION
     const required = [
       "findById",
       "findMany",
@@ -67,60 +53,38 @@ export default class BaseModel extends BaseClass {
       "startTransaction",
       "commitTransaction",
       "rollbackTransaction",
+      "ensureIndexes",
+      "normalizeOptions",
     ];
 
     const missing = required.filter(m => typeof driver[m] !== "function");
-    if (missing.length > 0) {
+    if (missing.length)
       throw new Error(
-        `❌ Invalid driver instance passed to ${
-          this.constructor.name
-        }. Missing methods: ${missing.join(", ")}`
+        `❌ Invalid driver passed to BaseModel. Missing: ${missing.join(", ")}`
       );
-    }
 
-    // -------------------------------------------------------------------------
-    // Validate table name
-    // -------------------------------------------------------------------------
-    if (!tableName || typeof tableName !== "string") {
-      throw new Error(
-        `❌ BaseModel requires a valid table name (got ${typeof tableName}).`
-      );
-    }
+    if (typeof tableName !== "string")
+      throw new Error(`❌ BaseModel requires a valid table name (string).`);
 
-    // -------------------------------------------------------------------------
-    // Validate schema
-    // -------------------------------------------------------------------------
-    if (!(schema instanceof Schema)) {
-      throw new Error(
-        `❌ BaseModel requires a valid Schema instance (got ${
-          schema?.constructor?.name ?? typeof schema
-        }).`
-      );
-    }
+    if (!(schema instanceof Schema))
+      throw new Error(`❌ BaseModel requires a Schema instance.`);
 
-    // -------------------------------------------------------------------------
-    // Assign core properties
-    // -------------------------------------------------------------------------
     this._driver = driver;
     this._tableName = tableName;
     this._schema = schema;
     this._name = this.constructor.modelName;
 
-    // Define reactive schema-backed properties
     this._definePropertiesFromSchema();
+
+    // AUTO-ENSURE INDEXES
+    this._driver.ensureIndexes(this._tableName, this._schema);
   }
 
-  // ---------------------------------------------------------------------------
-  // Static helpers
-  // ---------------------------------------------------------------------------
   static get modelName() {
-    const ctorName = this.name ?? "UnnamedModel";
-    return ctorName.endsWith("Model") ? ctorName.slice(0, -5) : ctorName;
+    const name = this.name ?? "UnnamedModel";
+    return name.endsWith("Model") ? name.slice(0, -5) : name;
   }
 
-  // ---------------------------------------------------------------------------
-  // Public getters
-  // ---------------------------------------------------------------------------
   get name() {
     return this._name;
   }
@@ -133,36 +97,28 @@ export default class BaseModel extends BaseClass {
   get driver() {
     return this._driver;
   }
+
   get data() {
     return { ...this._data };
   }
 
-  // ---------------------------------------------------------------------------
-  // Schema helpers
-  // ---------------------------------------------------------------------------
   _definePropertiesFromSchema() {
-    const schemaFields = this._schema.getSchema?.();
-    if (!schemaFields || typeof schemaFields !== "object") {
-      console.warn(`⚠️ No schema fields defined for model: ${this._name}`);
-      return;
-    }
+    const fields = this._schema.getSchema?.();
+    if (!fields) return;
 
-    for (const key of Object.keys(schemaFields)) {
+    for (const key of Object.keys(fields)) {
       if (Object.getOwnPropertyDescriptor(this, key)) continue;
       Object.defineProperty(this, key, {
         enumerable: true,
         configurable: true,
         get: () => this._data[key],
-        set: val => {
-          this._data[key] = val;
+        set: v => {
+          this._data[key] = v;
         },
       });
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Data utilities
-  // ---------------------------------------------------------------------------
   _setData(record) {
     this._data = { ...record };
   }
@@ -170,45 +126,35 @@ export default class BaseModel extends BaseClass {
   toObject() {
     return { ...this._data };
   }
-
   toJSON() {
     return this.toObject();
   }
 
-  // ---------------------------------------------------------------------------
-  // Validation helpers
-  // ---------------------------------------------------------------------------
-  async _handleValidationAndExecute(method, entity, dbAction, options = {}) {
-    const results = this.schema.validate(this._tableName, entity, options);
+  async _handleValidationAndExecute(method, entity, action, options = {}) {
+    const results = this._schema.validate(this._tableName, entity, options);
+
     if (!results.valid) {
       this._logValidationErrors(method, results.errors);
-      throw new ValidationError(this.name, method, results.errors);
+      throw new ValidationError(this._name, method, results.errors);
     }
-    return dbAction(results.value);
+
+    return action(results.value);
   }
 
   _logValidationErrors(method, errors = []) {
-    if (!errors?.length) return;
-    console.error(`\n⚠️ Validation failed in ${this.name}.${method}():`);
-    for (const err of errors) {
+    if (!errors.length) return;
+    console.error(`\n⚠️ Validation failed in ${this._name}.${method}():`);
+    errors.forEach(err => {
       if (typeof err === "string") console.error(`• ${err}`);
-      else if (err && typeof err === "object")
-        console.error(
-          `• Field: ${err.field ?? "?"} → ${err.message ?? "Invalid"}`
-        );
+      else if (err?.field) console.error(`• ${err.field}: ${err.message}`);
       else console.error(`• ${String(err)}`);
-    }
+    });
     console.error();
   }
 
-  // ---------------------------------------------------------------------------
-  // Static serialization helper
-  // ---------------------------------------------------------------------------
   static serialize(data) {
     if (Array.isArray(data))
-      return data.map(item =>
-        item instanceof BaseModel ? item.toObject() : item
-      );
+      return data.map(d => (d instanceof BaseModel ? d.toObject() : d));
     if (data instanceof BaseModel) return data.toObject();
     return data;
   }
