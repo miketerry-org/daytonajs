@@ -1,12 +1,12 @@
 // -----------------------------------------------------------------------------
-// table-data-gateway.js (Driver-API–corrected)
+// table-data-gateway.js (Driver-API–corrected, aligned with new BaseModel)
 // -----------------------------------------------------------------------------
 
-import BaseModel from "../base/base-model.js";
+import BaseModel, { ValidationError } from "../base/base-model.js";
 
 export default class TableDataGateway extends BaseModel {
-  constructor(driver, tableName, schema, config = {}) {
-    super(driver, tableName, schema, config);
+  constructor(driver, tableName, schema) {
+    super(driver, tableName, schema);
   }
 
   // ------------------------------------------------------------
@@ -78,6 +78,7 @@ export default class TableDataGateway extends BaseModel {
   // ------------------------------------------------------------
   async updateOne(record, options = {}) {
     if (!record?.id) throw new Error("updateOne requires data with an ID.");
+
     return this._handleValidationAndExecute("updateOne", record, valid =>
       this._driver.updateOne(this._tableName, valid, options)
     );
@@ -94,6 +95,7 @@ export default class TableDataGateway extends BaseModel {
   // ------------------------------------------------------------
   async deleteOne(idOrWhere, options = {}) {
     const where = typeof idOrWhere === "object" ? idOrWhere : { id: idOrWhere };
+
     return this._driver.deleteOne(this._tableName, where, options);
   }
 
@@ -111,9 +113,11 @@ export default class TableDataGateway extends BaseModel {
   async startTransaction() {
     return this._driver.startTransaction();
   }
+
   async commitTransaction() {
     return this._driver.commitTransaction();
   }
+
   async rollbackTransaction() {
     return this._driver.rollbackTransaction();
   }

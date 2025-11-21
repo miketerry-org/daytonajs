@@ -7,15 +7,20 @@ export default class Tenant extends BaseClass {
   #driverClass = null;
   #driverInstance = null;
 
-  constructor(config = {}) {
+  constructor(config = {}, modelClasses = []) {
     super(config);
 
-    // 1️⃣ Lookup the driver class immediately (cheap)
+    // 1️⃣ Lookup the driver class immediately
     if (!config.database_driver) {
       throw new Error(`Tenant is missing required config: database_driver`);
     }
-
     this.#driverClass = DriverRegistry.get(config.database_driver);
+
+    // 2️⃣ Store loaded model classes
+    this._modelClasses = modelClasses;
+
+    // 3️⃣ Will hold tenant-specific model instances
+    this.models = {};
   }
 
   /**
@@ -23,22 +28,39 @@ export default class Tenant extends BaseClass {
    * Lazily instantiates and connects on first access.
    */
   get db() {
-    // 2️⃣ Instantiate driver lazily
     if (!this.#driverInstance) {
       this.#driverInstance = new this.#driverClass(this.config);
     }
 
-    // 3️⃣ Connect if not already connected
     if (!this.#driverInstance.isConnected) {
-      // assume driver.connect() returns a promise or handles internal state
       this.#driverInstance.connect();
     }
 
     return this.#driverInstance;
   }
 
+  /**
+   * Lazy-instantiate tenant-specific models
+   * Each model receives this tenant's driver instance
+   */
+  initializeModels() {
+    for (const { name, class: ModelClass } of this._modelClasses) {
+      // Use lowercase keys for convenience: tenant.models.user
+      const key = name.toLowerCase();
+      if (this.models[key]) {
+        throw new Error(
+          `Tenant models already contain a model with name "${key}"`
+        );
+      }
+      this.models[key] = new ModelClass(this.db);
+    }
+  }
+
+  /**
+   * Optional: tenant-specific config validation
+   */
   verifyConfig(config) {
-    // Tenant-specific validation rules here.
+    // Add tenant-specific validation rules here if needed
     return null;
   }
 }

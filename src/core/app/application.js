@@ -5,6 +5,7 @@ import ConfigLoader from "./loaders/config-loader.js";
 import ControllerLoader from "./loaders/controller-loader.js";
 import DriverLoader from "./loaders/driver-loader.js";
 import MiddlewareLoader from "./loaders/middleware-loader.js";
+import ModelLoader from "./loaders/model-loader.js";
 
 export default class Application {
   constructor() {
@@ -12,6 +13,7 @@ export default class Application {
     this.tenants = []; // Tenant definitions from config
     this.controllers = []; // Loaded controllers (path + router)
     this.app = null; // Final Express instance
+    this.models = []; // Loaded model classes, shared for all tenants
   }
 
   /**
@@ -33,6 +35,10 @@ export default class Application {
 
     // 2️⃣ Auto-discover database drivers (framework → app)
     await this.#loadDatabaseDrivers();
+
+    // 2.5️⃣ Load all model classes (framework → app)
+    const modelLoader = new ModelLoader();
+    this.models = await modelLoader.load();
 
     // 3️⃣ Discover controllers (framework → app)
     this.controllers = await this.#loadControllers();

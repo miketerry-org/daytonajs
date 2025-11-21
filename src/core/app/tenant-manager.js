@@ -8,10 +8,18 @@ import Tenant from "./tenant.js";
 export default class TenantManager {
   #tenantList;
 
-  constructor(tenants = []) {
+  /**
+   * @param tenants Array of tenant configs
+   * @param modelClasses Array of loaded model classes from ModelLoader
+   */
+  constructor(tenants = [], modelClasses = []) {
     this.#tenantList = [];
+
     tenants.forEach(cfg => {
-      this.#tenantList.push(new Tenant(cfg));
+      // Pass shared model classes to each tenant
+      const tenant = new Tenant(cfg, modelClasses);
+      tenant.initializeModels(); // populate tenant.models
+      this.#tenantList.push(tenant);
     });
   }
 
@@ -37,8 +45,9 @@ export default class TenantManager {
   /**
    * Adds a new tenant at runtime.
    */
-  addTenant(config) {
-    const tenant = new Tenant(config);
+  addTenant(config, modelClasses = []) {
+    const tenant = new Tenant(config, modelClasses);
+    tenant.initializeModels();
     this.#tenantList.push(tenant);
     return tenant;
   }

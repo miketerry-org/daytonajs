@@ -8,6 +8,7 @@ import BaseController from "./src/core/base/base-controller.js";
 import BaseDriver from "./src/core/base/base-driver.js";
 import ActiveRecord from "./src/core/db/active-record.js";
 import TableDataGateway from "./src/core/db/table-data-gateway.js";
+import Schema from "./src/core/utility/schema.js";
 
 export {
   ActiveRecord,
@@ -16,5 +17,6 @@ export {
   BaseClass,
   BaseController,
   BaseDriver,
+  Schema,
   TableDataGateway,
 };

@@ -1,13 +1,12 @@
 // -----------------------------------------------------------------------------
-// active-record.js (Driver-API–corrected)
+// active-record.js (Driver-API–corrected, aligned with new BaseModel)
 // -----------------------------------------------------------------------------
 
-import BaseModel from "../base/base-model.js";
+import BaseModel, { ValidationError } from "../base/base-model.js";
 
 export default class ActiveRecord extends BaseModel {
-  constructor(driver, tableName, schema, config = {}, initialData = {}) {
-    super(driver, tableName, schema, config);
-    this._setData(initialData);
+  constructor(driver, tableName, schema) {
+    super(driver, tableName, schema);
   }
 
   // ------------------------------------------------------------
@@ -21,7 +20,6 @@ export default class ActiveRecord extends BaseModel {
       });
     }
 
-    // updateOne(table, data, options) — ID must be inside data
     return this.updateOne(this._data, options).then(result => {
       this._setData(result);
       return this;
@@ -31,7 +29,6 @@ export default class ActiveRecord extends BaseModel {
   async delete(options = {}) {
     if (!this._data.id) throw new Error("Cannot delete record without an ID.");
 
-    // deleteOne(table, whereClause)
     return this._driver.deleteOne(
       this._tableName,
       { id: this._data.id },
@@ -61,6 +58,7 @@ export default class ActiveRecord extends BaseModel {
 
   async updateOne(record, options = {}) {
     if (!record?.id) throw new Error("updateOne requires data with an ID.");
+
     return this._handleValidationAndExecute("updateOne", record, valid =>
       this._driver.updateOne(this._tableName, valid, options)
     );
@@ -123,7 +121,7 @@ export default class ActiveRecord extends BaseModel {
   }
 
   // ------------------------------------------------------------
-  // TRANSACTIONS (driver authoritative)
+  // TRANSACTIONS
   // ------------------------------------------------------------
   async transaction(callback) {
     return this._driver.transaction(callback);
@@ -132,9 +130,11 @@ export default class ActiveRecord extends BaseModel {
   async startTransaction() {
     return this._driver.startTransaction();
   }
+
   async commitTransaction() {
     return this._driver.commitTransaction();
   }
+
   async rollbackTransaction() {
     return this._driver.rollbackTransaction();
   }

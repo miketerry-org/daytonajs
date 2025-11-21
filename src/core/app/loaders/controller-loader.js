@@ -19,39 +19,27 @@ const appRoot = process.cwd();
 export default class ControllerLoader {
   constructor() {
     this.controllers = new Map(); // key = basePath, value = router
-    this.loadedControllers = []; // list of successfully loaded controllers/routes
+    this.loadedControllers = []; // list of successfully loaded controllers
+    this.routeRegistry = new Map(); // key = fullRoute ("GET /users"), value = controller file
   }
 
-  /**
-   * Loads framework controllers first, then application controllers.
-   * Application controllers override framework controllers on same route.
-   */
+  // ================================================================
+  // Public: Load all controllers (framework first, then app)
+  // ================================================================
   async load() {
-    // 1. Load framework controllers
     await this.#scanFolder(path.join(frameworkRoot, "controllers"), true);
-
-    // 2. Load application controllers
     await this.#scanFolder(appRoot, false);
 
-    // Print loaded controllers summary (single logging)
-    if (this.loadedControllers.length > 0) {
-      console.log("\n✅ Loaded controllers:");
-      this.loadedControllers.forEach(c => {
-        console.log(` • Route: ${c.basePath}  (${c.origin}: ${c.file})`);
-      });
-      console.log("─────────────────────────────────────────────\n");
-    }
-
-    // Return as array: [ { path, router }, ... ]
+    this.#printControllerSummary();
     return [...this.controllers.entries()].map(([path, router]) => ({
       path,
       router,
     }));
   }
 
-  /**
-   * Recursively scan for *controller.js/ts files.
-   */
+  // ================================================================
+  // Scan folders for *controller.js/ts files
+  // ================================================================
   async #scanFolder(folder, isFramework) {
     if (!fs.existsSync(folder)) return;
 
@@ -61,9 +49,7 @@ export default class ControllerLoader {
       const fullPath = path.join(folder, file.name);
 
       if (file.isDirectory()) {
-        // Skip node_modules for application scanning
         if (!isFramework && file.name === "node_modules") continue;
-
         await this.#scanFolder(fullPath, isFramework);
       } else if (file.name.match(/controller\.(js|ts)$/i)) {
         await this.#loadController(fullPath, isFramework);
@@ -71,31 +57,38 @@ export default class ControllerLoader {
     }
   }
 
-  /**
-   * Load a controller module and build its router.
-   */
+  // ================================================================
+  // Load a controller file and register its router
+  // ================================================================
   async #loadController(fullPath, isFramework) {
     try {
       const mod = await import(nodePathToFileURL(fullPath).href);
       const Controller = mod.default;
 
-      if (!Controller || typeof Controller.route !== "function") {
-        console.warn(`⚠️ Skipping invalid controller: ${fullPath}`);
-        return;
-      }
-
-      const basePath = Controller.route();
-      if (typeof basePath !== "string" || !basePath.startsWith("/")) {
+      // Validate interface
+      if (
+        !Controller ||
+        typeof Controller.route !== "function" ||
+        typeof Controller.routes !== "function"
+      ) {
         console.warn(
-          `⚠️ Invalid route() returned from ${fullPath}: must return something like "/users"`
+          `⚠️ Skipping invalid controller: ${fullPath} (must implement static route() and static routes(router))`
         );
         return;
       }
 
-      // Build router
-      const router = this.#buildRouter(Controller);
+      const basePath = Controller.route();
 
-      // Application controllers override framework ones
+      if (typeof basePath !== "string" || !basePath.startsWith("/")) {
+        console.warn(
+          `⚠️ Invalid route() in ${fullPath}: must return '/example'`
+        );
+        return;
+      }
+
+      const router = this.#buildRouter(Controller, fullPath, basePath);
+
+      // Framework controllers can be overridden by app controllers
       if (this.controllers.has(basePath) && isFramework) {
         console.log(
           `⚠️ Framework controller overridden by application: ${basePath}`
@@ -104,7 +97,6 @@ export default class ControllerLoader {
 
       this.controllers.set(basePath, router);
 
-      // Store for summary only
       this.loadedControllers.push({
         basePath,
         file: fullPath,
@@ -116,34 +108,106 @@ export default class ControllerLoader {
     }
   }
 
-  /**
-   * Build an Express router for the controller using the BaseController convention.
-   */
-  #buildRouter(Controller) {
+  // ================================================================
+  // Build router for a controller + provide route introspection & logging
+  // ================================================================
+  #buildRouter(Controller, filePath, basePath) {
     const router = express.Router();
+    const original = router.use.bind(router);
 
-    const handler = method => async (req, res, next) => {
-      const instance = new Controller(req, res, next);
+    // Wrap router methods for introspection + conflict detection
+    const methodsToWrap = [
+      "get",
+      "post",
+      "put",
+      "delete",
+      "patch",
+      "options",
+      "head",
+      "all",
+    ];
 
-      if (typeof instance[method] === "function") {
-        try {
-          await instance[method]();
-        } catch (err) {
-          next(err);
-        }
-      } else {
-        res.status(404).send("Not found");
-      }
+    for (const method of methodsToWrap) {
+      const originalMethod = router[method].bind(router);
+
+      router[method] = (route, ...handlers) => {
+        this.#registerRouteBinding(
+          method.toUpperCase(),
+          basePath + route,
+          filePath
+        );
+        return originalMethod(route, ...handlers);
+      };
+    }
+
+    // Allow nested routers (if controller wants to mount middleware inside)
+    router.use = (...args) => {
+      this.#registerRouteBinding("USE", basePath + "/*", filePath);
+      return original(...args);
     };
 
-    router.get("/", handler("index"));
-    router.get("/:id", handler("show"));
-    router.get("/new", handler("new"));
-    router.post("/", handler("create"));
-    router.get("/:id/edit", handler("edit"));
-    router.put("/:id", handler("update"));
-    router.delete("/:id", handler("delete"));
+    // Let controller define its routes
+    try {
+      Controller.routes(router);
+    } catch (err) {
+      console.error(`❌ Error in ${Controller.name}.routes():`);
+      console.error(err);
+    }
 
     return router;
+  }
+
+  // ================================================================
+  // Register route for conflict detection + logging
+  // ================================================================
+  #registerRouteBinding(method, fullRoute, filePath) {
+    const key = `${method} ${fullRoute}`;
+
+    if (this.routeRegistry.has(key)) {
+      console.error(`\n❌ ROUTE CONFLICT DETECTED`);
+      console.error(`   Route: ${key}`);
+      console.error(`   First defined in: ${this.routeRegistry.get(key)}`);
+      console.error(`   Conflicting file: ${filePath}`);
+      console.error("─────────────────────────────────────────────\n");
+    } else {
+      this.routeRegistry.set(key, filePath);
+      console.log(`📌 Route registered: ${key}   →   ${filePath}`);
+    }
+  }
+
+  // ================================================================
+  // Print summary of all loaded controllers
+  // ================================================================
+  #printControllerSummary() {
+    if (this.loadedControllers.length === 0) return;
+
+    console.log("\n✅ Loaded controllers:");
+    this.loadedControllers.forEach(c => {
+      console.log(` • Route: ${c.basePath}  (${c.origin}: ${c.file})`);
+    });
+    console.log("─────────────────────────────────────────────\n");
+  }
+
+  // ================================================================
+  // Public API: Introspection Tooling
+  // ================================================================
+  listControllers() {
+    return this.loadedControllers.map(c => ({
+      route: c.basePath,
+      file: c.file,
+      origin: c.origin,
+    }));
+  }
+
+  listRoutes() {
+    return [...this.routeRegistry.entries()].map(([key, file]) => ({
+      route: key,
+      definedIn: file,
+    }));
+  }
+
+  controllerForRoute(method, path) {
+    const key = `${method.toUpperCase()} ${path}`;
+    return this.routeRegistry.get(key) || null;
   }
 }

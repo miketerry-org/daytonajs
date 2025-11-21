@@ -19,7 +19,7 @@ export default class BaseClass {
    * @param {Config} [config] - Optional configuration instance.
    * @throws {Error} If instantiated directly or invalid config is supplied.
    */
-  constructor(config) {
+  constructor(config = undefined) {
     // prevent an instance of BaseClass  from being instanciated
     if (new.target === BaseClass) {
       throw new Error(msg.abstractClass);
