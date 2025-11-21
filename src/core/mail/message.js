@@ -1,7 +1,5 @@
 // message.js:
 
-"use strict";
-
 import BaseClass from "../base/base-class.js";
 
 /**

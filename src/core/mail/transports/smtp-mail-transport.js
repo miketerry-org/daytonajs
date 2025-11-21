@@ -1,28 +1,24 @@
-// smtpTransport.js:
-
-"use strict";
+// smtp-mail-transport.js:
 
 import BaseMailTransport from "../../base/base-mail-transport.js";
-import msg from "../../utility/msg.js";
 import verify from "../../utility/verify.js";
 
-// Declare nodemailer placeholder
+// Lazy-load nodemailer
 let nodemailer;
 
 /**
- * @class SMTPTransport
- * @extends MailTransport
+ * @class SmtpMailTransport
+ * @extends BaseMailTransport
  * @description
- * Sends messages via an SMTP server using Nodemailer.
+ * Sends messages via SMTP using Nodemailer.
  */
-export default class SMTPTransport extends BaseMailTransport {
+export default class SmtpMailTransport extends BaseMailTransport {
   /**
-   * @param {Config} config - Must include smtp.host, smtp.port, smtp.auth.user, smtp.auth.pass
+   * @param {Config} config - Must include smtp.host, smtp.port, smtp.username, smtp.password
    */
   constructor(config) {
     super(config);
-
-    /** @private {import('nodemailer').Transporter} */
+    /** @private {import('nodemailer').Transporter|null} */
     this._transporter = null;
   }
 
@@ -31,10 +27,8 @@ export default class SMTPTransport extends BaseMailTransport {
    * @param {Config} config
    */
   verifyConfig(config) {
-    // Ensure config.smtp exists and is an object
     let results = verify(config).isObject("smtp", true);
 
-    // Only continue deeper validation if smtp object exists
     if (results.errors.length === 0) {
       results = verify(config.smtp)
         .isString("host", true, 1, 255)
@@ -54,14 +48,11 @@ export default class SMTPTransport extends BaseMailTransport {
   }
 
   /**
-   * Connect to the SMTP server.
+   * Connect to SMTP server
    */
   async connect() {
-    if (this.connected) {
-      return;
-    }
+    if (this.connected) return;
 
-    // Lazy-load nodemailer if not yet imported
     if (!nodemailer) {
       nodemailer = (await import("nodemailer")).default;
     }
@@ -71,38 +62,34 @@ export default class SMTPTransport extends BaseMailTransport {
     this._transporter = nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
-      secure: !!smtp.secure, // true for 465, false for others
+      secure: !!smtp.secure,
       auth: {
         user: smtp.username,
         pass: smtp.password,
       },
-      ...smtp.options, // any additional nodemailer options
+      ...smtp.options,
     });
 
-    // Verify connection
     await this._transporter.verify();
     this.connected = true;
   }
 
   /**
-   * Disconnect (close transporter).
+   * Disconnect from SMTP server
    */
   async disconnect() {
-    if (this._transporter?.close) {
-      this._transporter.close();
-    }
+    if (this._transporter?.close) this._transporter.close();
     this.connected = false;
   }
 
   /**
    * Send a Message instance via SMTP
    * @param {Message} message
-   * @returns {Promise<Object>} Normalized response
    */
   async sendMail(message) {
-    if (!this.connected) await this.connect();
+    this.validateMessage(message);
+    await this.ensureConnected();
 
-    // Convert Message to Nodemailer format
     const mailOptions = {
       from: message.fromAddr[0].name
         ? `"${message.fromAddr[0].name}" <${message.fromAddr[0].email}>`
@@ -127,22 +114,20 @@ export default class SMTPTransport extends BaseMailTransport {
 
     try {
       const info = await this._transporter.sendMail(mailOptions);
-      return {
-        success: true,
+      return this.normalizeResponse({
         messageId: info.messageId,
         accepted: info.accepted,
         rejected: info.rejected,
-        response: info.response,
-      };
+        status: info.response,
+      });
     } catch (err) {
-      return {
-        success: false,
-        error: err.message,
-      };
+      return { success: false, error: err.message };
     }
   }
 
-  /** Metadata about this transport */
+  /**
+   * Transport metadata
+   */
   getInfo() {
     const smtp = this.config.smtp;
     return {

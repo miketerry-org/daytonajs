@@ -1,27 +1,23 @@
-// postmarkTransport.js:
-
-"use strict";
+// postmark-mail-transport.js:
 
 import BaseMailTransport from "../../base/base-mail-transport.js";
-import msg from "../../utility/msg.js";
 import verify from "../../utility/verify.js";
 
-// Declare postmark package placeholder (lazy-loaded)
-let postmark;
+// Lazy-load Postmark SDK
+let PostmarkClient;
 
 /**
- * @class PostmarkTransport
- * @extends MailTransport
+ * @class PostmarkMailTransport
+ * @extends BaseMailTransport
  * @description
  * Sends messages via the Postmark API using the official SDK.
  */
-export default class PostmarkTransport extends BaseMailTransport {
+export default class PostmarkMailTransport extends BaseMailTransport {
   /**
    * @param {Config} config - Must include postmark.api_key
    */
   constructor(config) {
     super(config);
-
     /** @private {import("postmark").ServerClient|null} */
     this._client = null;
   }
@@ -47,22 +43,21 @@ export default class PostmarkTransport extends BaseMailTransport {
   }
 
   /**
-   * Connect to Postmark API.
+   * Connect to Postmark API
    */
   async connect() {
     if (this.connected) return;
 
-    // Lazy-load Postmark SDK
-    if (!postmark) {
-      postmark = (await import("postmark")).ServerClient;
+    if (!PostmarkClient) {
+      PostmarkClient = (await import("postmark")).ServerClient;
     }
 
-    this._client = new postmark(this.config.postmark.api_key);
+    this._client = new PostmarkClient(this.config.postmark.api_key);
     this.connected = true;
   }
 
   /**
-   * Disconnect (no-op for Postmark).
+   * Disconnect (no-op for Postmark)
    */
   async disconnect() {
     this._client = null;
@@ -72,12 +67,10 @@ export default class PostmarkTransport extends BaseMailTransport {
   /**
    * Send a Message instance via Postmark
    * @param {Message} message
-   * @returns {Promise<Object>} Normalized response
    */
   async sendMail(message) {
-    if (!this.connected) {
-      await this.connect();
-    }
+    this.validateMessage(message);
+    await this.ensureConnected();
 
     const from = message.fromAddr[0].name
       ? `"${message.fromAddr[0].name}" <${message.fromAddr[0].email}>`
@@ -115,22 +108,20 @@ export default class PostmarkTransport extends BaseMailTransport {
 
     try {
       const response = await this._client.sendEmail(mailOptions);
-      return {
-        success: true,
+      return this.normalizeResponse({
         messageId: response.MessageID,
         submittedAt: response.SubmittedAt,
         to: response.To,
         status: response.Message,
-      };
+      });
     } catch (err) {
-      return {
-        success: false,
-        error: err.message,
-      };
+      return { success: false, error: err.message };
     }
   }
 
-  /** Metadata about this transport */
+  /**
+   * Transport metadata
+   */
   getInfo() {
     return {
       provider: "postmark",
