@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import * as TOML from "@iarna/toml";
+import verify from "../../utility/verify.js";
 
 const ALGORITHM = "aes-256-cbc";
 const IV_LENGTH = 16;
@@ -105,7 +106,8 @@ export default class ConfigLoader {
   }
 
   validateConfig(_config) {
-    // Placeholder for semantic validation
+    const results = verify(_config.server);
+    console.log("results", results);
   }
 
   // ================================================================

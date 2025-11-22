@@ -1,146 +1,65 @@
 // env.js
+import dotenv from "dotenv";
+
+// Load environment variables quietly, overriding existing values if present
+dotenv.config({ quiet: true, override: true });
 
 /**
- * @fileoverview Environment configuration utility.
- * Loads and validates environment variables, normalizes NODE_ENV,
- * and provides safe accessors for environment-specific configuration,
- * including optional debugging mode.
+ * Recursively deep-freezes an object to make it fully immutable.
+ * @param {object} obj
+ * @returns {object} frozen object
  */
-
-import msg from "./msg.js";
-
-// Ensure NODE_ENV is defined early
-if (!process.env.NODE_ENV) {
-  console.warn(msg.nodeEnvNotSet);
-  process.env.NODE_ENV = "production";
+function deepFreeze(obj) {
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    if (value && typeof value === "object") {
+      deepFreeze(value);
+    }
+  }
+  return Object.freeze(obj);
 }
 
-/**
- * @class Environment
- * @classdesc Provides access to normalized environment settings and validated environment variables.
- */
-class Environment {
-  static #labels = {
-    production: ["prod", "production"],
-    staging: ["stage", "staging"],
-    development: ["dev", "development"],
-    testing: ["test", "testing"],
-  };
+// Normalize NODE_ENV once
+const rawMode = process.env.NODE_ENV?.toLowerCase() || "production";
 
-  /**
-   * Normalizes the raw NODE_ENV and returns a canonical mode.
-   * @returns {"production" | "staging" | "development" | "testing"}
-   */
-  get mode() {
-    const raw = process.env.NODE_ENV?.toLowerCase().trim();
-    let canonical;
+// Determine debugMode from environment variable or CLI argument
+const debugMode =
+  process.env.DEBUG_MODE?.toLowerCase() === "true" ||
+  process.argv.includes("--debug") ||
+  process.argv.includes("-D");
 
-    if (Environment.#labels.production.includes(raw)) {
-      canonical = "production";
-    } else if (Environment.#labels.staging.includes(raw)) {
-      canonical = "staging";
-    } else if (Environment.#labels.development.includes(raw)) {
-      canonical = "development";
-    } else if (Environment.#labels.testing.includes(raw)) {
-      canonical = "testing";
-    } else {
-      console.warn(msg.unknownNodeEnv.replace("{value}", process.env.NODE_ENV));
-      canonical = "production";
-    }
+// Validate SERVER_NODE
+const serverNodeRaw = process.env.SERVER_NODE;
+const serverNode = parseInt(serverNodeRaw, 10);
 
-    process.env.NODE_ENV = canonical;
-    return canonical;
-  }
-
-  /** @returns {boolean} True if environment is production. */
-  get isProduction() {
-    return this.mode === "production";
-  }
-
-  /** @returns {boolean} True if environment is staging. */
-  get isStaging() {
-    return this.mode === "staging";
-  }
-
-  /** @returns {boolean} True if environment is development. */
-  get isDevelopment() {
-    return this.mode === "development";
-  }
-
-  /** @returns {boolean} True if environment is testing. */
-  get isTesting() {
-    return this.mode === "testing";
-  }
-
-  /**
-   * DEBUG MODE
-   * Accepts: "true", "1", "debug", "yes"
-   * Any other value => false
-   * @returns {boolean}
-   */
-  get isDebug() {
-    const v = process.env.DEBUG?.toLowerCase().trim();
-    return ["1", "true", "yes", "debug"].includes(v);
-  }
-
-  /**
-   * Debug logger: prints only when debug mode is active.
-   * @param  {...any} args
-   */
-  debugLog(...args) {
-    if (this.isDebug) {
-      console.debug("[DEBUG]", ...args);
-    }
-  }
-
-  /**
-   * Retrieves and validates the encryption key.
-   * Must be a 64-character hexadecimal string.
-   */
-  get encryptKey() {
-    const key = process.env.ENCRYPT_KEY;
-    if (!key || typeof key !== "string" || key.length !== 64) {
-      throw new Error(msg.invalidEncryptKeyLength);
-    }
-    if (!/^[a-fA-F0-9]{64}$/.test(key)) {
-      throw new Error(msg.invalidEncryptKeyFormat);
-    }
-    return key;
-  }
-
-  /**
-   * Retrieves the appropriate database URI based on the environment.
-   */
-  get databaseURI() {
-    const envMap = {
-      production: process.env.DATABASE_URI_PRODUCTION,
-      staging: process.env.DATABASE_URI_STAGING,
-      development: process.env.DATABASE_URI_DEVELOPMENT,
-      testing: process.env.DATABASE_URI_TESTING,
-    };
-
-    const uri = envMap[this.mode];
-    if (!uri) {
-      throw new Error(`Database URI not set for mode "${this.mode}".`);
-    }
-
-    return uri;
-  }
-
-  /**
-   * Retrieves and validates the server node identifier.
-   */
-  get serverNode() {
-    const value = Number.parseInt(process.env.SERVER_NODE, 10);
-    if (Number.isInteger(value) && value >= 1 && value <= 1000) {
-      return value;
-    }
-    throw new Error(
-      `"SERVER_NODE" environment variable must be an integer between 1 and 1000.`
-    );
-  }
+if (!Number.isInteger(serverNode) || serverNode < 1 || serverNode > 1000) {
+  throw new Error(
+    `The "SERVER_NODE" environment variable must be an integer between 1 and 1000. Received: "${serverNodeRaw}"`
+  );
 }
 
-// Instantiate and export singleton instance
-const env = new Environment();
+// Ensure the encryption key is defined and has valid length
+const configEncryptKey = process.env.CONFIG_ENCRYPT_KEY || "";
+if (configEncryptKey.length !== 64) {
+  throw new Error(
+    `The "CONFIG_ENCRYPT_KEY" environment variable must be defined and have length 64.`
+  );
+}
+
+// Build the environment descriptor
+const rawEnv = {
+  mode: rawMode,
+  isDevelopment: rawMode === "development",
+  isTesting: rawMode === "testing",
+  isStaging: rawMode === "staging",
+  isProduction: rawMode === "production",
+  debugMode,
+  serverNode,
+  configEncryptKey,
+};
+
+// Deep freeze to guarantee total read-only immutability
+export const env = deepFreeze(rawEnv);
+
+// Optional: default export for convenience
 export default env;
