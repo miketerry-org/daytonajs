@@ -1,6 +1,5 @@
-// index.js:
+// index.js
 
-// import these modules to export classes
 import env from "./src/core/utility/env.js";
 import Application from "./src/core/app/application.js";
 import BaseClass from "./src/core/base/base-class.js";
@@ -11,6 +10,7 @@ import TableDataGateway from "./src/core/db/table-data-gateway.js";
 import Schema from "./src/core/utility/schema.js";
 import ConfigLoader from "./src/core/app/loaders/config-loader.js";
 
+// 3️⃣ Export everything
 export {
   ActiveRecord,
   Application,

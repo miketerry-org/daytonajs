@@ -1,14 +1,12 @@
-// env.js
-import dotenv from "dotenv";
+// env.js:
 
-// Load environment variables quietly, overriding existing values if present
+// Load environment variables quietly, overriding existing values
+import dotenv from "dotenv";
 dotenv.config({ quiet: true, override: true });
 
-/**
- * Recursively deep-freezes an object to make it fully immutable.
- * @param {object} obj
- * @returns {object} frozen object
- */
+// -----------------------------
+// Helper: deep freeze
+// -----------------------------
 function deepFreeze(obj) {
   for (const key of Object.keys(obj)) {
     const value = obj[key];
@@ -19,47 +17,107 @@ function deepFreeze(obj) {
   return Object.freeze(obj);
 }
 
-// Normalize NODE_ENV once
+// -----------------------------
+// Normalize NODE_ENV
+// -----------------------------
 const rawMode = process.env.NODE_ENV?.toLowerCase() || "production";
 
-// Determine debugMode from environment variable or CLI argument
-const debugMode =
-  process.env.DEBUG_MODE?.toLowerCase() === "true" ||
-  process.argv.includes("--debug") ||
-  process.argv.includes("-D");
+// -----------------------------
+// Verbose mode (CLI: --verbose or -V)
+// -----------------------------
+export const verboseMode =
+  process.argv.includes("--verbose") || process.argv.includes("-V");
 
-// Validate SERVER_NODE
-const serverNodeRaw = process.env.SERVER_NODE;
-const serverNode = parseInt(serverNodeRaw, 10);
+// ANSI colors (safe even if terminal doesn't support them)
+const colorDim = "\x1b[2m";
+const colorBlue = "\x1b[34m";
+const colorReset = "\x1b[0m";
 
-if (!Number.isInteger(serverNode) || serverNode < 1 || serverNode > 1000) {
-  throw new Error(
-    `The "SERVER_NODE" environment variable must be an integer between 1 and 1000. Received: "${serverNodeRaw}"`
+// -----------------------------
+// Build console.verbose API
+// -----------------------------
+console.verbose = (...args) => {
+  if (verboseMode) {
+    const timestamp = `${colorDim}${new Date().toISOString()}${colorReset}`;
+    console.log(`${colorBlue}[VERBOSE]${colorReset}`, timestamp, ...args);
+  }
+};
+
+// Grouping
+console.verbose.group = (label = "") => {
+  if (verboseMode) {
+    console.group(`${colorBlue}[VERBOSE]${colorReset} ${label}`);
+  }
+};
+console.verbose.groupEnd = () => {
+  if (verboseMode) console.groupEnd();
+};
+
+// Pretty JSON
+console.verbose.json = (label, obj) => {
+  if (!verboseMode) return;
+
+  const timestamp = `${colorDim}${new Date().toISOString()}${colorReset}`;
+  console.log(
+    `${colorBlue}[VERBOSE JSON]${colorReset}`,
+    timestamp,
+    label || ""
   );
-}
+  console.log(JSON.stringify(obj, null, 2));
+};
 
-// Ensure the encryption key is defined and has valid length
-const configEncryptKey = process.env.CONFIG_ENCRYPT_KEY || "";
-if (configEncryptKey.length !== 64) {
-  throw new Error(
-    `The "CONFIG_ENCRYPT_KEY" environment variable must be defined and have length 64.`
+// Timers
+const verboseTimers = new Map();
+
+console.verbose.time = (label = "default") => {
+  if (!verboseMode) return;
+  verboseTimers.set(label, performance.now());
+};
+
+console.verbose.timeEnd = (label = "default") => {
+  if (!verboseMode) return;
+
+  if (!verboseTimers.has(label)) {
+    console.verbose(`No such verbose timer: ${label}`);
+    return;
+  }
+
+  const start = verboseTimers.get(label);
+  const ms = (performance.now() - start).toFixed(2);
+  verboseTimers.delete(label);
+
+  const timestamp = `${colorDim}${new Date().toISOString()}${colorReset}`;
+  console.log(
+    `${colorBlue}[VERBOSE TIMER]${colorReset}`,
+    timestamp,
+    `${label}: ${ms}ms`
   );
-}
+};
 
-// Build the environment descriptor
+// Stack trace
+console.verbose.trace = (...args) => {
+  if (!verboseMode) return;
+
+  const timestamp = `${colorDim}${new Date().toISOString()}${colorReset}`;
+  console.trace(`${colorBlue}[VERBOSE TRACE]${colorReset}`, timestamp, ...args);
+};
+
+// -----------------------------
+// Environment flags
+// -----------------------------
 const rawEnv = {
   mode: rawMode,
   isDevelopment: rawMode === "development",
   isTesting: rawMode === "testing",
   isStaging: rawMode === "staging",
   isProduction: rawMode === "production",
-  debugMode,
-  serverNode,
-  configEncryptKey,
+
+  // expose verbose mode
+  verboseMode,
 };
 
-// Deep freeze to guarantee total read-only immutability
+// -----------------------------
+// Deep freeze to make env immutable
+// -----------------------------
 export const env = deepFreeze(rawEnv);
-
-// Optional: default export for convenience
 export default env;
