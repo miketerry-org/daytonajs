@@ -36,9 +36,10 @@ if (fs.existsSync(filename)) {
 }
 
 // ensure encryption key is in environment variables
-if (!process.env.ENCRYPT_KEY || process.env.ENCRYPT_KEY.length !== 64) {
+const key = process.env.CONFIG_ENCRYPT_KEY;
+if (!key || key.length !== 64) {
   throw new Error(
-    `The "ENCRYPT_KEY" environment variable must exist and have a length of64`
+    `The "CONFIG_ENCRYPT_KEY" environment variable must exist and have a length of64`
   );
 }
 

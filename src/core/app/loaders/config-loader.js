@@ -1,142 +1,144 @@
-//controller-loader.js
+// config-loader.js
 
 import fs from "fs";
 import path from "path";
-import express from "express";
-import { fileURLToPath } from "url";
-import BaseController from "../../base/base-controller.js";
+import crypto from "crypto";
+import * as TOML from "@iarna/toml";
+
+const ALGORITHM = "aes-256-cbc";
+const IV_LENGTH = 16;
 
 /**
- * Resolve framework root (root of daytona-mvc package)
+ * ConfigLoader
+ * Loads, decrypts, parses, and exposes a single `config.toml.secret`
+ * located at the application root.
  */
-const __filename = fileURLToPath(import.meta.url);
-const frameworkRoot = path.resolve(__filename, "../../..");
-
-/**
- * Application root
- */
-const appRoot = process.cwd();
-
-export default class ControllerLoader {
+export default class ConfigLoader {
   constructor() {
-    this.controllers = new Map(); // key = basePath, value = router
-  }
+    this.appRoot = process.cwd();
+    this.configPath = path.join(this.appRoot, "config.toml.secret");
 
-  /**
-   * Loads framework controllers first, then application controllers.
-   * Application controllers override framework controllers on same route.
-   */
-  async load() {
-    // 1. Load framework controllers
-    await this.#scanFolder(
-      path.join(frameworkRoot, "controllers"),
-      true /* isFramework */
-    );
+    this.config = null;
+    this.loadErrors = [];
 
-    // 2. Load application controllers
-    await this.#scanFolder(appRoot, false);
-
-    // Return as array: [ { path, router }, ... ]
-    return [...this.controllers.entries()].map(([path, router]) => ({
-      path,
-      router,
-    }));
-  }
-
-  /**
-   * Recursively scan for *controller.js/ts files.
-   */
-  async #scanFolder(folder, isFramework) {
-    if (!fs.existsSync(folder)) return;
-
-    const files = fs.readdirSync(folder, { withFileTypes: true });
-
-    for (const file of files) {
-      const fullPath = path.join(folder, file.name);
-
-      if (file.isDirectory()) {
-        // Skip node_modules for application scanning
-        if (!isFramework && file.name === "node_modules") continue;
-
-        await this.#scanFolder(fullPath, isFramework);
-      } else if (file.name.match(/controller\.(js|ts)$/i)) {
-        await this.#loadController(fullPath, isFramework);
-      }
-    }
-  }
-
-  /**
-   * Load a controller module and build its router.
-   */
-  async #loadController(fullPath, isFramework) {
-    try {
-      const mod = await import(fullPath);
-      const Controller = mod.default;
-
-      if (!Controller || typeof Controller.route !== "function") {
-        console.warn(`⚠️ Skipping invalid controller: ${fullPath}`);
-        return;
-      }
-
-      const basePath = Controller.route();
-      if (typeof basePath !== "string" || !basePath.startsWith("/")) {
-        console.warn(
-          `⚠️ Invalid route() returned from ${fullPath}: must return something like "/users"`
-        );
-        return;
-      }
-
-      // Build router
-      const router = this.#buildRouter(Controller);
-
-      // Application controllers override framework ones
-      if (this.controllers.has(basePath) && isFramework) {
-        console.log(
-          `⚠️ Framework controller overridden by application: ${basePath}`
-        );
-      }
-
-      this.controllers.set(basePath, router);
-
-      console.log(
-        `Controller loaded: ${basePath}  (${
-          isFramework ? "framework" : "app"
-        }: ${fullPath})`
-      );
-    } catch (err) {
-      console.error(`❌ Failed to load controller: ${fullPath}`);
-      console.error(err);
-    }
-  }
-
-  /**
-   * Build an Express router for the controller using the BaseController convention.
-   */
-  #buildRouter(Controller) {
-    const router = express.Router();
-
-    const handler = method => async (req, res, next) => {
-      const instance = new Controller(req, res, next);
-
-      if (typeof instance[method] === "function") {
-        try {
-          await instance[method]();
-        } catch (err) {
-          next(err);
-        }
-      } else {
-        res.status(404).send("Not found");
-      }
+    this.loadedMeta = {
+      file: this.configPath,
+      decrypted: false,
+      parsed: false,
+      validated: false,
     };
+  }
 
-    router.get("/", handler("index"));
-    router.get("/:id", handler("show"));
-    router.get("/new", handler("new"));
-    router.post("/", handler("create"));
-    router.get("/:id/edit", handler("edit"));
-    router.put("/:id", handler("update"));
-    router.delete("/:id", handler("delete"));
+  // ================================================================
+  // Public: Load and return config
+  // ================================================================
+  async load() {
+    const ENCRYPT_KEY = process.env.CONFIG_ENCRYPT_KEY;
+    if (!ENCRYPT_KEY) {
+      throw new Error("CONFIG_ENCRYPT_KEY environment variable must be set");
+    }
+    if (ENCRYPT_KEY.length !== 64) {
+      throw new Error(
+        `CONFIG_ENCRYPT_KEY must be 32 bytes (64 hex chars), got ${ENCRYPT_KEY.length}`
+      );
+    }
 
-    return router;
+    try {
+      const buffer = this.#readEncryptedFile();
+      const decrypted = this.#decrypt(buffer, ENCRYPT_KEY);
+      this.loadedMeta.decrypted = true;
+
+      const tomlStr = decrypted.toString("utf8");
+      const parsed = TOML.parse(tomlStr);
+      this.loadedMeta.parsed = true;
+
+      this.verifyConfig(parsed);
+      this.validateConfig(parsed);
+      this.loadedMeta.validated = true;
+
+      this.config = parsed;
+
+      return parsed;
+    } catch (err) {
+      this.loadErrors.push(err);
+      throw err;
+    }
+  }
+
+  // ================================================================
+  // Read encrypted file
+  // ================================================================
+  #readEncryptedFile() {
+    if (!fs.existsSync(this.configPath)) {
+      throw new Error(`Config file not found: ${this.configPath}`);
+    }
+    return fs.readFileSync(this.configPath);
+  }
+
+  // ================================================================
+  // Decrypt file contents
+  // ================================================================
+  #decrypt(buffer, key) {
+    try {
+      const iv = buffer.slice(0, IV_LENGTH);
+      const encryptedText = buffer.slice(IV_LENGTH);
+      const keyBuffer = Buffer.from(key, "hex");
+
+      const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv);
+      const decrypted = Buffer.concat([
+        decipher.update(encryptedText),
+        decipher.final(),
+      ]);
+
+      return decrypted;
+    } catch (err) {
+      console.error("❌ Config decryption failed");
+      throw err;
+    }
+  }
+
+  // ================================================================
+  // Empty validation hooks (to be implemented by the user)
+  // ================================================================
+  verifyConfig(_config) {
+    // Placeholder for structural validation
+  }
+
+  validateConfig(_config) {
+    // Placeholder for semantic validation
+  }
+
+  // ================================================================
+  // Public API
+  // ================================================================
+  getConfig() {
+    return this.config;
+  }
+
+  getSection(pathStr) {
+    if (!this.config) return null;
+    const parts = pathStr.split(".");
+    let current = this.config;
+    for (const key of parts) {
+      if (current[key] === undefined) return null;
+      current = current[key];
+    }
+    return current;
+  }
+
+  listSections() {
+    if (!this.config) return [];
+    return Object.keys(this.config);
+  }
+
+  // ================================================================
+  // Custom serialization for console.log / JSON
+  // ================================================================
+  toJSON() {
+    return {
+      config: this.config,
+      loadedMeta: this.loadedMeta,
+      configPath: this.configPath,
+    };
   }
 }
