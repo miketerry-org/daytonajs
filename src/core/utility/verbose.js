@@ -1,21 +1,4 @@
-// env.js:
-
-// Load environment variables quietly, overriding existing values
-import dotenv from "dotenv";
-dotenv.config({ quiet: true, override: true });
-
-// -----------------------------
-// Helper: deep freeze
-// -----------------------------
-function deepFreeze(obj) {
-  for (const key of Object.keys(obj)) {
-    const value = obj[key];
-    if (value && typeof value === "object") {
-      deepFreeze(value);
-    }
-  }
-  return Object.freeze(obj);
-}
+// verbose.js:
 
 // -----------------------------
 // Normalize NODE_ENV
@@ -111,13 +94,4 @@ const rawEnv = {
   isTesting: rawMode === "testing",
   isStaging: rawMode === "staging",
   isProduction: rawMode === "production",
-
-  // expose verbose mode
-  verboseMode,
 };
-
-// -----------------------------
-// Deep freeze to make env immutable
-// -----------------------------
-export const env = deepFreeze(rawEnv);
-export default env;

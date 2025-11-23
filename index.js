@@ -1,24 +1,27 @@
 // index.js
 
-import env from "./src/core/utility/env.js";
+// this must be first import to initialize runtime environment variables
+import system from "./src/core/utility/system.js";
+import "./src/core/utility/verbose.js";
+
+import ActiveRecord from "./src/core/db/active-record.js";
 import Application from "./src/core/app/application.js";
 import BaseClass from "./src/core/base/base-class.js";
 import BaseController from "./src/core/base/base-controller.js";
 import BaseDriver from "./src/core/base/base-driver.js";
-import ActiveRecord from "./src/core/db/active-record.js";
-import TableDataGateway from "./src/core/db/table-data-gateway.js";
-import Schema from "./src/core/utility/schema.js";
 import ConfigLoader from "./src/core/app/loaders/config-loader.js";
+import Schema from "./src/core/utility/schema.js";
+import TableDataGateway from "./src/core/db/table-data-gateway.js";
 
 // 3️⃣ Export everything
 export {
   ActiveRecord,
   Application,
-  env,
   BaseClass,
   BaseController,
   BaseDriver,
-  Schema,
-  TableDataGateway,
   ConfigLoader,
+  Schema,
+  system,
+  TableDataGateway,
 };
