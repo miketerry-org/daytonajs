@@ -1,4 +1,4 @@
-// verbose.js:
+// verbose.js
 
 // -----------------------------
 // Normalize NODE_ENV
@@ -6,12 +6,17 @@
 const rawMode = process.env.NODE_ENV?.toLowerCase() || "production";
 
 // -----------------------------
-// Verbose mode (CLI: --verbose or -V)
+// Verbose mode (CLI: --verbose or -V, or env VERBOSE=true)
 // -----------------------------
+const envVerbose = process.env.VERBOSE?.toLowerCase() === "true";
 export const verboseMode =
-  process.argv.includes("--verbose") || process.argv.includes("-V");
+  envVerbose ||
+  process.argv.includes("--verbose") ||
+  process.argv.includes("-V");
 
+// -----------------------------
 // ANSI colors (safe even if terminal doesn't support them)
+// -----------------------------
 const colorDim = "\x1b[2m";
 const colorBlue = "\x1b[34m";
 const colorReset = "\x1b[0m";
@@ -88,7 +93,7 @@ console.verbose.trace = (...args) => {
 // -----------------------------
 // Environment flags
 // -----------------------------
-const rawEnv = {
+export const rawEnv = {
   mode: rawMode,
   isDevelopment: rawMode === "development",
   isTesting: rawMode === "testing",

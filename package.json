@@ -59,6 +59,8 @@
     "sql-where-parser": "^2.2.1"
   },
   "devDependencies": {
-    "mongodb": "^6.20.0"
+    "mongodb": "^6.20.0",
+    "cross-env": "^7.0.3",
+    "nodemon": "^3.1.10"
   }
 }

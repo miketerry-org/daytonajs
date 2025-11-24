@@ -1,4 +1,4 @@
-// env.js:
+// system.js:
 
 // Load environment variables quietly, overriding existing values
 import dotenv from "dotenv";
