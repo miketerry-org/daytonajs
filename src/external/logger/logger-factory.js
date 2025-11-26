@@ -6,10 +6,10 @@ import MongoDBLogger from "./mongodb-logger.js";
 
 export default class LoggerFactory {
   static createLogger() {
-    const cfg = globalThis.system?.config;
+    const cfg = system.config.server;
 
     if (!cfg) {
-      throw new Error("system.config is not defined");
+      throw new Error("system.config.server is not defined");
     }
 
     const type = cfg.log_type || "console";
@@ -20,23 +20,23 @@ export default class LoggerFactory {
         return new ConsoleLogger(level);
 
       case "file":
-        if (!cfg.log_filePath) {
+        if (!cfg.log_file_path) {
           throw new Error(
-            "FileLogger requires 'log_filePath' in system.config"
+            "FileLogger requires 'log_file_path' in system.config.server"
           );
         }
-        return new FileLogger(cfg.log_filePath, level);
+        return new FileLogger(cfg.log_file_path, level);
 
       case "mongodb":
-        if (!cfg.log_mongoUri || !cfg.log_mongoDbName) {
+        if (!cfg.database_uri || !cfg.database_name) {
           throw new Error(
-            "MongoDBLogger requires 'log_mongoUri' and 'log_mongoDbName' in system.config"
+            "MongoDBLogger requires 'database_uri' and 'database_name' in system.config.server"
           );
         }
         return new MongoDBLogger({
-          uri: cfg.log_mongoUri,
-          dbName: cfg.log_mongoDbName,
-          collectionName: cfg.log_mongoCollection || "logs",
+          uri: cfg.database_uri,
+          dbName: cfg.database_name,
+          collectionName: cfg.log_table_name || "logs",
           level,
         });
 

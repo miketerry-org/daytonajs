@@ -8,7 +8,8 @@
     "start": "NODE_ENV=production node index.js",
     "staging": "NODE_ENV=staging node index.js",
     "dev": "NODE_ENV=development nodemon dev.js",
-    "test": "ormond"
+    "test": "ormond",
+    "encrypt": "topsecret encrypt config.toml config.toml.secret --key-file config.key"
   },
   "directories": {
     "lib": "lib",

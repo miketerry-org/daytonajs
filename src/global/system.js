@@ -23,6 +23,23 @@ const system = {
 };
 
 // -----------------------------
+// Add mutable "log" via getter/setter BEFORE freeze
+// This property will still be writable after deepFreeze()
+// -----------------------------
+let _log = null; // private backing store for "log"
+
+Object.defineProperty(system, "log", {
+  get() {
+    return _log;
+  },
+  set(value) {
+    _log = value;
+  },
+  enumerable: true,
+  configurable: false,
+});
+
+// -----------------------------
 // Load and attach config
 // -----------------------------
 try {

@@ -1,6 +1,7 @@
 // fileLogger.js:
 
 import path from "path";
+import fs from "fs";
 import AbstractLogger from "./abstract-logger.js";
 
 export default class FileLogger extends AbstractLogger {
