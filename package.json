@@ -35,7 +35,6 @@
   "homepage": "https://github.com/miketerry-org/daytonajs#readme",
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "better-sqlite3": "^12.4.1",
     "compression": "^1.8.1",
     "connect-redis": "^9.0.0",
     "cookie-parser": "^1.4.7",
@@ -59,8 +58,8 @@
     "sql-where-parser": "^2.2.1"
   },
   "devDependencies": {
-    "mongodb": "^6.20.0",
     "cross-env": "^7.0.3",
+    "mongodb": "^6.20.0",
     "nodemon": "^3.1.10"
   }
 }

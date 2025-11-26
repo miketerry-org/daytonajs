@@ -2,3 +2,7 @@
 .env
 .git
 node_modules
+Config.key
+Config.toml
+config.toml.secret
+
