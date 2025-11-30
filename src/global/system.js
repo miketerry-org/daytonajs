@@ -3,6 +3,7 @@
 import dotenv from "dotenv";
 dotenv.config({ quiet: true, override: true });
 
+import addGetters from "../internal/utility/add-Getters.js";
 import deepFreeze from "../internal/utility/deep-freeze.js";
 import ConfigLoader from "../internal/loader/config-loader.js";
 
@@ -24,9 +25,8 @@ const system = {
 
 // -----------------------------
 // Add mutable "log" via getter/setter BEFORE freeze
-// This property will still be writable after deepFreeze()
 // -----------------------------
-let _log = null; // private backing store for "log"
+let _log = null;
 
 Object.defineProperty(system, "log", {
   get() {
@@ -45,6 +45,11 @@ Object.defineProperty(system, "log", {
 try {
   const loader = new ConfigLoader();
   system.config = loader.load();
+
+  // Attach getter helpers to the server config object
+  if (system.config?.server) {
+    addGetters(system.config.server);
+  }
 } catch (err) {
   console.error("❌ Failed to load system.config:", err.message);
   system.config = null;

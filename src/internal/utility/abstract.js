@@ -7,7 +7,7 @@ export default class Abstract {
     }
   }
 
-  notImplemented(methodName) {
+  static notImplemented(methodName) {
     throw new Error(
       `The method "${this.constructor.name}.${methodName}" must be overridden!`
     );

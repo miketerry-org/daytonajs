@@ -1,38 +1,21 @@
 // postgres-driver.js
 
 import SQLDriver from "./sql-driver.js";
-import DriverRegistry from "../driver-registry.js";
+import DriverRegistry from "./driver-registry.js";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
 
 /**
  * PostgresDriver
  *
  * Implements SQLDriver for PostgreSQL using `pg` client.
- * Supports connection pooling, transactions, and parameterized queries.
  */
 export default class PostgresDriver extends SQLDriver {
-  constructor(config = {}) {
-    super(config);
+  pool = null;
+  client = null; // used for transactions
+  pgModule = null;
 
-    this.pgModule = null;
-    this.pool = null;
-    this.client = null; // used during transactions
-
-    this.config = {
-      host: config.host,
-      user: config.user,
-      password: config.password,
-      database: config.database,
-      port: config.port ?? 5432,
-      max: config.connectionLimit ?? 10,
-      ssl: config.ssl ?? false,
-    };
-
-    // Basic validation
-    if (!this.config.host || !this.config.user || !this.config.database) {
-      throw new Error(
-        "PostgresDriver requires `host`, `user`, and `database` in config"
-      );
-    }
+  constructor() {
+    super();
   }
 
   /* =============================================================
@@ -51,14 +34,39 @@ export default class PostgresDriver extends SQLDriver {
     const { Pool } = await import("pg");
     this.pgModule = { Pool };
 
-    this.pool = new Pool(this.config);
+    // ------------------------------------------------------------
+    // Parse URI + optional options
+    // ------------------------------------------------------------
+    const uri = system.server.getString("database_uri"); // required
+    const options = system.server.getObject("database_options", {});
 
-    // Test connection immediately
+    const parsed = parseDatabaseURI(uri);
+
+    if (!parsed.host || !parsed.database || !parsed.username) {
+      throw new Error(
+        "PostgresDriver: database_uri must include host, database, and username."
+      );
+    }
+
+    const poolConfig = {
+      host: parsed.host,
+      port: parsed.port || 5432,
+      user: parsed.username,
+      password: parsed.password,
+      database: parsed.database,
+      max: options.connectionLimit ?? 10,
+      ssl: options.ssl ?? false,
+      ...options, // any other pg Pool options
+    };
+
+    this.pool = new Pool(poolConfig);
+
+    // Test connection
     const client = await this.pool.connect();
     client.release();
 
-    console.log(
-      `[PostgresDriver] Connected to ${this.config.database}@${this.config.host}:${this.config.port}`
+    system.log.info(
+      `[PostgresDriver] Connected to ${poolConfig.database}@${poolConfig.host}:${poolConfig.port}`
     );
   }
 
@@ -66,7 +74,7 @@ export default class PostgresDriver extends SQLDriver {
     if (this.pool) {
       await this.pool.end();
       this.pool = null;
-      console.log("[PostgresDriver] Disconnected.");
+      system.log.info("[PostgresDriver] Disconnected.");
     }
   }
 
@@ -92,7 +100,7 @@ export default class PostgresDriver extends SQLDriver {
 
       return result.rows;
     } catch (err) {
-      console.error(
+      system.log.error(
         "[PostgresDriver] SQL Error:",
         err.message,
         "\nQuery:",

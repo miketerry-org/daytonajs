@@ -1,28 +1,43 @@
-// better-sqlite-driver.js:
+// better-sqlite-driver.js
 
+import path from "path";
 import SQLDriver from "./sql-driver.js";
 import Database from "better-sqlite3";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
 
 /**
- * SQLiteDriver (better-sqlite3)
+ * BetterSqliteDriver (better-sqlite3)
  *
  * Implements SQLDriver using better-sqlite3 (local SQLite engine, no server required).
  */
 export default class BetterSqliteDriver extends SQLDriver {
-  constructor(config = {}) {
-    super(config);
+  #uri;
+  #dbFile;
+  #DB;
 
-    this.db = null;
+  constructor() {
+    super();
 
-    this.config = {
-      url: config.database_url, // e.g., ./data/app.db or :memory:
-    };
+    // ------------------------------------------------------------
+    // Load global config
+    // ------------------------------------------------------------
+    this.#uri = system.server.getString("database_uri"); // required
+    const configOptions = system.server.getObject("database_options", {});
 
-    if (!this.config.url) {
+    // ------------------------------------------------------------
+    // Parse URI
+    // ------------------------------------------------------------
+    // SQLite URI can be file path or sqlite://absolute/path/to/db.sqlite
+    const parsed = parseDatabaseURI(this.#uri);
+    if (!parsed.database) {
       throw new Error(
-        "SQLiteDriver requires a `url` (e.g., ./mydb.sqlite or :memory:)"
+        "BetterSqliteDriver: database file path missing in database_uri."
       );
     }
+
+    // Resolve the database file path
+    this.#dbFile = parsed.database;
+    this.#configOptions = configOptions;
   }
 
   /* =============================================================
@@ -39,16 +54,18 @@ export default class BetterSqliteDriver extends SQLDriver {
     if (this.db) return;
 
     try {
-      // Open the database
-      this.db = new Database(this.config.url);
+      system.log.debug("[SQLiteDriver] Connecting to:", this.#dbFile);
+
+      // Open the database with options
+      this.db = new Database(this.#dbFile, this.#configOptions);
 
       // Simple connection test
       const result = this.db.prepare("SELECT 1 AS ok").get();
       if (result?.ok === 1) {
-        console.log(`[SQLiteDriver] Connected to ${this.config.url}`);
+        system.log.debug(`[SQLiteDriver] Connected to ${this.#dbFile}`);
       }
     } catch (err) {
-      console.error("[SQLiteDriver] Failed to connect:", err.message);
+      system.log.error("[SQLiteDriver] Failed to connect:", err.message);
       throw err;
     }
   }
@@ -57,9 +74,9 @@ export default class BetterSqliteDriver extends SQLDriver {
     if (this.db) {
       try {
         this.db.close();
-        console.log("[SQLiteDriver] Disconnected.");
+        system.log.debug("[SQLiteDriver] Disconnected.");
       } catch (err) {
-        console.warn("[SQLiteDriver] Error closing DB:", err.message);
+        system.log.warn("[SQLiteDriver] Error closing DB:", err.message);
       } finally {
         this.db = null;
       }
@@ -90,7 +107,10 @@ export default class BetterSqliteDriver extends SQLDriver {
         };
       }
     } catch (err) {
-      console.error("[SQLiteDriver] SQL Error:", err.message, "\nQuery:", sql);
+      system.log.error(
+        "[SQLiteDriver] SQL Error:",
+        err.message + "\nQuery:" + sql
+      );
       throw err;
     }
   }
@@ -99,14 +119,17 @@ export default class BetterSqliteDriver extends SQLDriver {
    * Transaction Management
    * ============================================================= */
   async startTransaction() {
+    if (!this.db) throw new Error("SQLiteDriver: Database not connected");
     this.db.exec("BEGIN TRANSACTION");
   }
 
   async commitTransaction() {
+    if (!this.db) throw new Error("SQLiteDriver: Database not connected");
     this.db.exec("COMMIT");
   }
 
   async rollbackTransaction() {
+    if (!this.db) throw new Error("SQLiteDriver: Database not connected");
     this.db.exec("ROLLBACK");
   }
 

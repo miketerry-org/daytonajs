@@ -36,6 +36,7 @@
   "homepage": "https://github.com/miketerry-org/daytonajs#readme",
   "dependencies": {
     "@iarna/toml": "^2.2.5",
+    "better-sqlite3": "^12.4.6",
     "compression": "^1.8.1",
     "connect-redis": "^9.0.0",
     "cookie-parser": "^1.4.7",

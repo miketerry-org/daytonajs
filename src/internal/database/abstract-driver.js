@@ -1,32 +1,31 @@
-// base-driver.js
+// abstract-driver.js
 
-export default class BaseDriver {
+import Abstract from "../utility/abstract.js";
+
+export default class AbstractDriver extends Abstract {
   constructor() {
+    super();
     this._ensuredIndexes = new Set();
   }
 
   static driverName() {
-    throw new Error(
-      `"${this.constructor.name}.driverName" method must be overridden!`
-    );
+    this.notImplemented("driverName");
   }
 
   ensureIndexes(tableName, schema) {
-    if (this._ensuredIndexes.has(tableName)) return;
+    if (this._ensuredIndexes.has(tableName)) {
+      return;
+    }
     const indexes = schema.getIndexes?.();
-    if (!indexes || !indexes.length) return;
-    console.log(`✅ Ensuring indexes for table "${tableName}":`, indexes);
+    if (!indexes || !indexes.length) {
+      return;
+    }
+    system.log.debug(`✅ Ensuring indexes for table "${tableName}":`, indexes);
     this._ensuredIndexes.add(tableName);
   }
 
   hasEnsuredIndexesFor(tableName) {
     return this._ensuredIndexes.has(tableName);
-  }
-
-  requireOverride(methodName) {
-    throw new Error(
-      `❌ BaseDriver.${methodName}() must be implemented by a subclass.`
-    );
   }
 
   normalizeOptions(options = {}) {
@@ -38,57 +37,74 @@ export default class BaseDriver {
   // CRUD stubs
   // ---------------------------------------------------------------------------
   async findById(table, id) {
-    this.requireOverride("findById");
+    this.notImplemented("findById");
   }
+
   async findMany(table, whereClause = "") {
-    this.requireOverride("findMany");
+    this.notImplemented("findMany");
   }
+
   async insertOne(table, data, options = {}) {
-    this.requireOverride("insertOne");
+    this.notImplemented("insertOne");
   }
+
   async insertMany(table, data = [], options = {}) {
-    this.requireOverride("insertMany");
+    this.notImplemented("insertMany");
   }
+
   async updateOne(table, data, options = {}) {
-    this.requireOverride("updateOne");
+    this.notImplemented("updateOne");
   }
+
   async updateMany(table, data, whereClause = "") {
-    this.requireOverride("updateMany");
+    this.notImplemented("updateMany");
   }
+
   async upsert(table, data, options = {}) {
-    this.requireOverride("upsert");
+    this.notImplemented("upsert");
   }
+
   async upsertMany(table, data = [], options = {}) {
-    this.requireOverride("upsertMany");
+    this.notImplemented("upsertMany");
   }
+
   async deleteOne(table, whereClause = "") {
-    this.requireOverride("deleteOne");
+    this.notImplemented("deleteOne");
   }
+
   async deleteMany(table, whereClause = "") {
-    this.requireOverride("deleteMany");
+    this.notImplemented("deleteMany");
   }
+
   async count(table, whereClause = "") {
-    this.requireOverride("count");
+    this.notImplemented("count");
   }
+
   async exists(table, whereClause = "") {
-    this.requireOverride("exists");
+    this.notImplemented("exists");
   }
+
   async aggregate(table, pipeline) {
-    this.requireOverride("aggregate");
+    this.notImplemented("aggregate");
   }
+
   async query(rawQuery, options) {
-    this.requireOverride("query");
+    this.notImplemented("query");
   }
+
   async transaction(callback) {
-    this.requireOverride("transaction");
+    this.notImplemented("transaction");
   }
+
   async startTransaction() {
-    this.requireOverride("startTransaction");
+    this.notImplemented("startTransaction");
   }
+
   async commitTransaction(session) {
-    this.requireOverride("commitTransaction");
+    this.notImplemented("commitTransaction");
   }
+
   async rollbackTransaction(session) {
-    this.requireOverride("rollbackTransaction");
+    this.notImplemented("rollbackTransaction");
   }
 }

@@ -1,67 +1,79 @@
-// libsql-driver.js:
+// libsql-driver.js
 
 import SQLDriver from "./sql-driver.js";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
 
 /**
- * SQLiteDriver (Turso-compatible)
+ * LibSqlDriver (Turso-compatible)
  *
  * Implements SQLDriver using @libsql/client (works with local SQLite or remote Turso).
  */
 export default class LibSqlDriver extends SQLDriver {
-  constructor(config = {}) {
-    super(config);
+  #db = null;
+  #clientModule = null;
+  #config = {};
 
-    this.db = null;
-    this.clientModule = null;
+  constructor() {
+    super();
 
-    this.config = {
-      url: config.url, // e.g., file:./data/app.db or libsql://dbname.turso.io
-      authToken: config.authToken ?? null, // for Turso remote DBs
-    };
+    // ------------------------------------------------------------
+    // Load global config
+    // ------------------------------------------------------------
+    const uri = system.server.getString("database_uri"); // required
+    const options = system.server.getObject("database_options", {});
 
-    if (!this.config.url) {
+    // ------------------------------------------------------------
+    // Parse URI
+    // ------------------------------------------------------------
+    const parsed = parseDatabaseURI(uri);
+    if (!parsed.host && !parsed.database) {
       throw new Error(
-        "SQLiteDriver requires a `url` (e.g., file:./mydb.sqlite or libsql://your-db-url)"
+        "LibSqlDriver: database_uri must include host or database path."
       );
     }
+
+    // Build config for @libsql/client
+    this.#config.url = parsed.host
+      ? `${parsed.host}/${parsed.database || ""}` // remote
+      : parsed.database; // local file path
+
+    // Any extra options (auth token, etc.) from config
+    Object.assign(this.#config, options);
   }
 
   /* =============================================================
    * Driver Identity
    * ============================================================= */
   static driverName() {
-    return "libsql-sqlite";
+    return "libsql";
   }
 
   /* =============================================================
    * Connection Management
    * ============================================================= */
   async connect() {
-    if (this.db) return;
+    if (this.#db) return;
 
     const { createClient } = await import("@libsql/client");
-    this.clientModule = { createClient };
+    this.#clientModule = { createClient };
 
-    this.db = createClient({
-      url: this.config.url,
-      authToken: this.config.authToken ?? undefined,
-    });
+    this.#db = createClient(this.#config);
 
     // Basic connection test
     try {
-      await this.db.execute("SELECT 1 AS ok");
-      console.log(`[SQLiteDriver] Connected to ${this.config.url}`);
+      await this.#db.execute("SELECT 1 AS ok");
+      system.log.debug(`[LibSqlDriver] Connected to ${this.#config.url}`);
     } catch (err) {
-      console.error("[SQLiteDriver] Connection test failed:", err.message);
+      system.log.error("[LibSqlDriver] Connection test failed:", err.message);
       throw err;
     }
   }
 
   async disconnect() {
-    if (this.db && typeof this.db.close === "function") {
-      await this.db.close();
-      this.db = null;
-      console.log("[SQLiteDriver] Disconnected.");
+    if (this.#db && typeof this.#db.close === "function") {
+      await this.#db.close();
+      this.#db = null;
+      system.log.debug("[LibSqlDriver] Disconnected.");
     }
   }
 
@@ -73,7 +85,7 @@ export default class LibSqlDriver extends SQLDriver {
    * Execute SQL
    * ============================================================= */
   async execute(sql, params = []) {
-    if (!this.db) throw new Error("SQLiteDriver: Database not connected");
+    if (!this.#db) throw new Error("LibSqlDriver: Database not connected");
 
     // Convert positional array params to libsql’s named binding format {1: value, 2: value, ...}
     const boundParams = Array.isArray(params)
@@ -84,20 +96,23 @@ export default class LibSqlDriver extends SQLDriver {
       : params;
 
     try {
-      const result = await this.db.execute(sql, boundParams);
+      const result = await this.#db.execute(sql, boundParams);
 
       // Normalize the result
       const isSelect = /^\s*SELECT/i.test(sql);
-      if (isSelect) {
-        return result.rows || [];
-      }
+      if (isSelect) return result.rows || [];
 
       return {
         changes: result.changes ?? 0,
         lastInsertRowid: result.lastInsertRowid ?? null,
       };
     } catch (err) {
-      console.error("[SQLiteDriver] SQL Error:", err.message, "\nQuery:", sql);
+      system.log.error(
+        "[LibSqlDriver] SQL Error:",
+        err.message,
+        "\nQuery:",
+        sql
+      );
       throw err;
     }
   }
@@ -121,12 +136,10 @@ export default class LibSqlDriver extends SQLDriver {
    * Table & Primary Key Formatting
    * ============================================================= */
   formatTableName(modelName) {
-    // SQLite convention: lowercase plural snake_case
     return SQLDriver.toSnakeCasePlural(modelName, false);
   }
 
   formatPrimaryKey(logicalKey = "id") {
-    // SQLite typically uses INTEGER PRIMARY KEY AUTOINCREMENT
     return logicalKey;
   }
 }

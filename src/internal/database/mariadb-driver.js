@@ -1,6 +1,8 @@
-// -----------------------------------------------------------------------------
+// mariadb-driver.js
+
 import SQLDriver from "./sql-driver.js";
-import DriverRegistry from "../driver-registry.js";
+import DriverRegistry from "./driver-registry.js";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
 
 /**
  * MariaDBDriver
@@ -9,11 +11,12 @@ import DriverRegistry from "../driver-registry.js";
  * Inherits all standard CRUD, query, and transaction logic from SQLDriver.
  */
 export default class MariaDBDriver extends SQLDriver {
-  constructor(config = {}) {
-    super(config);
-    this.pool = null;
-    this.connection = null;
-    this.mariadbModule = null;
+  pool = null;
+  connection = null;
+  mariadbModule = null;
+
+  constructor() {
+    super();
   }
 
   /* =============================================================
@@ -32,22 +35,40 @@ export default class MariaDBDriver extends SQLDriver {
     const mariadb = await import("mariadb");
     this.mariadbModule = mariadb;
 
-    this.pool = mariadb.createPool({
-      host: this.config.host,
-      user: this.config.user,
-      password: this.config.password,
-      database: this.config.database,
-      port: this.config.port,
-      connectionLimit: this.config.connectionLimit ?? 5,
+    // ------------------------------------------------------------
+    // Parse URI + load additional options
+    // ------------------------------------------------------------
+    const uri = system.server.getString("database_uri"); // required
+    const options = system.server.getObject("database_options", {});
+
+    const parsed = parseDatabaseURI(uri);
+
+    if (!parsed.host || !parsed.database) {
+      throw new Error(
+        "MariaDBDriver: database_uri must include host and database."
+      );
+    }
+
+    const poolOptions = {
+      host: parsed.host,
+      port: parsed.port || 3306,
+      user: parsed.username,
+      password: parsed.password,
+      database: parsed.database,
+      connectionLimit: options.connectionLimit || 5,
       supportBigNumbers: true,
       bigNumberStrings: false,
-    });
+      ...options, // allow any other custom pool options
+    };
 
+    this.pool = mariadb.createPool(poolOptions);
+
+    // Test connection
     const conn = await this.pool.getConnection();
     conn.release();
 
-    console.log(
-      `[MariaDBDriver] Connected to ${this.config.database}@${this.config.host}:${this.config.port}`
+    system.log.debug(
+      `[MariaDBDriver] Connected to ${poolOptions.database}@${poolOptions.host}:${poolOptions.port}`
     );
   }
 
@@ -55,7 +76,7 @@ export default class MariaDBDriver extends SQLDriver {
     if (this.pool) {
       await this.pool.end();
       this.pool = null;
-      console.log("[MariaDBDriver] Disconnected.");
+      system.log.debug("[MariaDBDriver] Disconnected.");
     }
   }
 
@@ -75,7 +96,7 @@ export default class MariaDBDriver extends SQLDriver {
     try {
       result = await conn.query(sql, params);
 
-      // Normalize rowCount for consistency with SQLDriver expectations
+      // Normalize rowCount
       if (Array.isArray(result)) {
         result.rowCount = result.affectedRows ?? result.length;
       } else if (
@@ -88,7 +109,12 @@ export default class MariaDBDriver extends SQLDriver {
 
       return result;
     } catch (err) {
-      console.error("[MariaDBDriver] SQL Error:", err.message, "\nQuery:", sql);
+      system.log.error(
+        "[MariaDBDriver] SQL Error:",
+        err.message,
+        "\nQuery:",
+        sql
+      );
       throw err;
     } finally {
       if (!this.connection) conn.release();
@@ -130,14 +156,13 @@ export default class MariaDBDriver extends SQLDriver {
    * Table Name / Primary Key Formatting
    * ============================================================= */
   formatTableName(modelName) {
-    // MariaDB convention: lowercase plural snake_case table names
     return SQLDriver.toSnakeCasePlural(modelName, false);
   }
 
   formatPrimaryKey(logicalKey = "id") {
-    return logicalKey; // default MariaDB primary key convention
+    return logicalKey;
   }
 }
 
-// Register this driver with the global registry
+// Register this driver
 DriverRegistry.add("mariadb", MariaDBDriver);

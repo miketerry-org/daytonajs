@@ -1,7 +1,8 @@
-// mysql-driver.js:
+// mysql-driver.js
 
 import SQLDriver from "./sql-driver.js";
-import DriverRegistry from "../driver-registry.js";
+import DriverRegistry from "./driver-registry.js";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
 
 /**
  * MySQLDriver
@@ -10,55 +11,65 @@ import DriverRegistry from "../driver-registry.js";
  * Shares all CRUD and query logic with other SQL drivers.
  */
 export default class MySQLDriver extends SQLDriver {
-  constructor(config = {}) {
-    super(config);
+  pool = null;
+  connection = null;
+  mysqlModule = null;
 
-    this.pool = null;
-    this.connection = null;
-    this.mysqlModule = null;
-
-    this.config = {
-      host: config.host,
-      user: config.user,
-      password: config.password,
-      database: config.database,
-      port: config.port ?? 3306,
-      connectionLimit: config.connectionLimit ?? 5,
-    };
+  constructor() {
+    super();
   }
 
+  /* =============================================================
+   * Driver Identity
+   * ============================================================= */
   static driverName() {
     return "mysql";
   }
 
-  // ---------------------------------------------------------------------------
-  // Connection Management (no validation)
-  // ---------------------------------------------------------------------------
-
+  /* =============================================================
+   * Connection Management
+   * ============================================================= */
   async connect() {
-    if (this.pool) return; // already connected
+    if (this.pool) return;
 
     const mysql = await import("mysql2/promise");
     this.mysqlModule = mysql;
 
-    this.pool = mysql.createPool({
-      host: this.config.host,
-      user: this.config.user,
-      password: this.config.password,
-      database: this.config.database,
-      port: this.config.port,
-      connectionLimit: this.config.connectionLimit,
+    // ------------------------------------------------------------
+    // Parse URI + additional options
+    // ------------------------------------------------------------
+    const uri = system.server.getString("database_uri"); // required
+    const options = system.server.getObject("database_options", {});
+
+    const parsed = parseDatabaseURI(uri);
+
+    if (!parsed.host || !parsed.database) {
+      throw new Error(
+        "MySQLDriver: database_uri must include host and database."
+      );
+    }
+
+    const poolOptions = {
+      host: parsed.host,
+      port: parsed.port || 3306,
+      user: parsed.username,
+      password: parsed.password,
+      database: parsed.database,
+      connectionLimit: options.connectionLimit || 5,
       supportBigNumbers: true,
       bigNumberStrings: false,
       multipleStatements: false,
-    });
+      ...options, // any other custom options
+    };
 
-    // test connection
+    this.pool = mysql.createPool(poolOptions);
+
+    // Test connection
     const conn = await this.pool.getConnection();
     conn.release();
 
-    console.log(
-      `[MySQLDriver] Connected to ${this.config.database}@${this.config.host}:${this.config.port}`
+    system.log.info(
+      `[MySQLDriver] Connected to ${poolOptions.database}@${poolOptions.host}:${poolOptions.port}`
     );
   }
 
@@ -66,7 +77,7 @@ export default class MySQLDriver extends SQLDriver {
     if (this.pool) {
       await this.pool.end();
       this.pool = null;
-      console.log("[MySQLDriver] Disconnected.");
+      system.log.info("[MySQLDriver] Disconnected.");
     }
   }
 
@@ -74,10 +85,9 @@ export default class MySQLDriver extends SQLDriver {
     await this.disconnect();
   }
 
-  // ---------------------------------------------------------------------------
-  // SQL Execution
-  // ---------------------------------------------------------------------------
-
+  /* =============================================================
+   * SQL Execution
+   * ============================================================= */
   async execute(sql, params = []) {
     if (!this.pool) throw new Error("MySQLDriver: Database not connected.");
 
@@ -91,10 +101,9 @@ export default class MySQLDriver extends SQLDriver {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Transaction Management
-  // ---------------------------------------------------------------------------
-
+  /* =============================================================
+   * Transaction Management
+   * ============================================================= */
   async startTransaction() {
     if (!this.pool) throw new Error("MySQLDriver: Not connected.");
     if (this.connection) throw new Error("Transaction already started.");
@@ -123,12 +132,11 @@ export default class MySQLDriver extends SQLDriver {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Table & Primary Key Formatting
-  // ---------------------------------------------------------------------------
-
+  /* =============================================================
+   * Table & Primary Key Formatting
+   * ============================================================= */
   formatTableName(modelName) {
-    return super.constructor.toSnakeCasePlural(modelName, false);
+    return SQLDriver.toSnakeCasePlural(modelName, false);
   }
 
   formatPrimaryKey(logicalKey = "id") {

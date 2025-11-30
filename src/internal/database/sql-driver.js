@@ -1,8 +1,8 @@
 // sql-driver.js:
 
-import BaseDriver from "../base//base-driver.js";
+import AbstractDriver from "./abstract-driver.js";
 
-export default class SQLDriver extends BaseDriver {
+export default class SQLDriver extends AbstractDriver {
   constructor(dbClient) {
     super();
     this.db = dbClient; // expects a knex-like SQL client

@@ -1,27 +1,37 @@
 // mongodb-driver.js
 
 import { MongoClient, ObjectId } from "mongodb";
-import BaseDriver from "../../base/base-driver.js";
-import sqlToMongoDB from "../../utility/sql-to-mongodb.js";
+import AbstractDriver from "./abstract-driver.js";
+import parseDatabaseURI from "../utility/parse-database-uri.js";
+import sqlToMongoDB from "../utility/sql-to-mongodb.js";
 
-export default class MongoDBDriver extends BaseDriver {
-  _client;
-  _db;
+export default class MongoDBDriver extends AbstractDriver {
+  _client = null;
+  _db = null;
+  _ensuredIndexes = new Set();
 
-  constructor(config = {}) {
+  constructor() {
     super();
-    const { database_uri: uri, database_name, options = {} } = config;
 
-    if (!uri || typeof uri !== "string") {
-      throw new Error(
-        "❌ MongoDBDriver requires a valid 'database_uri' string in config"
-      );
+    // ------------------------------------------------------------
+    // Load global config
+    // ------------------------------------------------------------
+    const uri = system.server.getString("database_uri"); // required
+    const configOptions = system.server.getObject("database_options", {});
+
+    // ------------------------------------------------------------
+    // Parse URI
+    // ------------------------------------------------------------
+    const parsed = parseDatabaseURI(uri);
+    if (!parsed.database) {
+      throw new Error("MongoDBDriver: database name missing in database_uri.");
     }
 
-    this._client = new MongoClient(uri, options);
-    this._db = database_name
-      ? this._client.db(database_name)
-      : this._client.db();
+    // ------------------------------------------------------------
+    // Create client + DB accessor
+    // ------------------------------------------------------------
+    this._client = new MongoClient(uri, configOptions);
+    this._db = this._client.db(parsed.database);
   }
 
   static driverName() {
@@ -32,17 +42,19 @@ export default class MongoDBDriver extends BaseDriver {
   // Connection management
   // ---------------------------------------------------------------------------
   async connect() {
-    if (!this._client.topology || !this._client.topology.isConnected()) {
-      await this._client.connect();
-    }
+    await this._client.connect(); // safe to call multiple times
     return this._db;
   }
 
   async disconnect() {
-    if (this._client) await this._client.close();
+    if (this._client) {
+      await this._client.close();
+    }
   }
 
   collection(name) {
+    if (!name)
+      throw new Error("MongoDBDriver.collection() requires a collection name.");
     return this._db.collection(name);
   }
 
@@ -60,7 +72,7 @@ export default class MongoDBDriver extends BaseDriver {
       await col.createIndex(fields, options);
     }
 
-    console.log(`✅ Ensured indexes for "${table}"`, indexes);
+    system.log.debug?.(`Ensured indexes for "${table}"`);
     this._ensuredIndexes.add(table);
   }
 
@@ -102,7 +114,7 @@ export default class MongoDBDriver extends BaseDriver {
   async updateOne(table, data, options = {}) {
     const { returnFull = false, session = null } =
       this.normalizeOptions(options);
-    if (!data._id) throw new Error("❌ updateOne requires an '_id' field");
+    if (!data._id) throw new Error("updateOne requires an '_id' field.");
 
     const id = new ObjectId(data._id);
     const { _id, ...updateData } = data;
@@ -118,6 +130,7 @@ export default class MongoDBDriver extends BaseDriver {
     const filter = sqlToMongoDB(whereClause);
     const col = this.collection(table);
     const result = await col.updateMany(filter, { $set: data }, { session });
+
     return {
       matchedCount: result.matchedCount,
       modifiedCount: result.modifiedCount,
@@ -131,15 +144,13 @@ export default class MongoDBDriver extends BaseDriver {
     const col = this.collection(table);
 
     await col.updateOne({ _id: id }, { $set: data }, { upsert: true, session });
-
     return returnFull ? await col.findOne({ _id: id }) : { _id: id };
   }
 
   async upsertMany(table, data = [], options = {}) {
     const results = [];
     for (const doc of data) {
-      const result = await this.upsert(table, doc, options);
-      results.push(result);
+      results.push(await this.upsert(table, doc, options));
     }
     return results;
   }
@@ -176,7 +187,6 @@ export default class MongoDBDriver extends BaseDriver {
   }
 
   async query(rawQuery, options = {}) {
-    // rawQuery is expected to be a function that receives the collection
     return rawQuery(this.collection(options.table), options);
   }
 
@@ -202,6 +212,7 @@ export default class MongoDBDriver extends BaseDriver {
   async transaction(callback) {
     const session = this._client.startSession();
     let result;
+
     try {
       await session.withTransaction(async () => {
         result = await callback({ session });
@@ -209,6 +220,7 @@ export default class MongoDBDriver extends BaseDriver {
     } finally {
       session.endSession();
     }
+
     return result;
   }
 }

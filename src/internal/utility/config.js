@@ -1,4 +1,4 @@
-// config.js:
+// config.js
 
 import path from "path";
 import fs from "fs";
@@ -135,10 +135,10 @@ export default class Config {
       throw new Error(`File not found! (${filename}) `);
     }
 
-    // red the encrypted file buffer
+    // read the encrypted file buffer
     let fileContent = fs.readFileSync(filename);
 
-    // if there is an encryption key then user it
+    // if there is an encryption key then use it
     if (encryptKey) {
       fileContent = this.decrypt(fileContent, encryptKey);
     }
