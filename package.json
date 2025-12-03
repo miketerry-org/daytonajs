@@ -9,7 +9,8 @@
     "staging": "NODE_ENV=staging node index.js",
     "dev": "NODE_ENV=development nodemon dev.js",
     "test": "ormond",
-    "encrypt": "topsecret encrypt config.toml config.toml.secret --key-file config.key"
+    "encrypt": "topsecret encrypt config.toml config.toml.secret --key-file config.key",
+    "import-all": "nodemon --watch . -- --preserve-symlinks --preserve-symlinks-main import-all.js"
   },
   "directories": {
     "lib": "lib",
@@ -35,6 +36,7 @@
   },
   "homepage": "https://github.com/miketerry-org/daytonajs#readme",
   "dependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@iarna/toml": "^2.2.5",
     "better-sqlite3": "^12.4.6",
     "compression": "^1.8.1",
@@ -51,9 +53,9 @@
     "install": "^0.13.0",
     "libsql": "^0.5.22",
     "method-override": "^3.0.0",
+    "mongodb": "^6.21.0",
     "morgan": "^1.10.1",
     "mysql2": "^3.15.3",
-    "npm": "^11.6.0",
     "pg": "^8.16.3",
     "pluralize": "^8.0.0",
     "redis": "^5.9.0",
@@ -61,7 +63,6 @@
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
-    "mongodb": "^6.20.0",
     "nodemon": "^3.1.10"
   }
 }
