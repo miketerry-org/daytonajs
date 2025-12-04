@@ -45,7 +45,6 @@ Object.defineProperty(system, "log", {
 try {
   const loader = new ConfigLoader();
   system.config = loader.load();
-  console.log("system.config", system.config.server);
 
   // Attach getter helpers to server config section
   if (system.config?.server) {

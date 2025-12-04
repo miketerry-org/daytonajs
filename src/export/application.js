@@ -7,6 +7,7 @@ import ControllerLoader from "../loader/controller-loader.js";
 import DriverLoader from "../loader/driver-loader.js";
 import MiddlewareLoader from "../loader/middleware-loader.js";
 import ModelLoader from "../loader/model-loader.js";
+import system from "./system.js";
 
 export default class Application {
   constructor() {
@@ -53,28 +54,15 @@ export default class Application {
       ...(this.config.middlewares || []),
     ];
 
-    // 6️⃣ Debug output
-    this.#debugListMiddlewares(allMiddlewares);
-
-    // 7️⃣ Build Express app
     try {
       this.app = await initExpress({
-        config: this.config,
         middlewares: allMiddlewares,
         routers: this.controllers,
       });
     } catch (err) {
-      console.error("❌ Failed to initialize Express app");
+      system.log.error("❌ Failed to initialize Express app");
       throw err;
     }
-  }
-
-  /**
-   * Load config.toml.secret via the ConfigLoader
-   */
-  async #loadConfig() {
-    const loader = new ConfigLoader();
-    return await loader.load();
   }
 
   /**
@@ -101,28 +89,11 @@ export default class Application {
     return loader.load();
   }
 
-  /**
-   * Debug print middleware order
-   */
-  #debugListMiddlewares(allMiddlewares) {
-    if (!this.config.debug) return;
-
-    console.log("─────────────────────────────────────────────");
-    console.log("🧩  Express Middleware Load Order (Debug Mode)");
-    console.log("─────────────────────────────────────────────");
-
-    allMiddlewares.forEach((mw, i) => {
-      const name = mw.name || "(anonymous middleware)";
-      console.log(`${String(i + 1).padStart(2, "0")}. ${name}`);
-    });
-
-    console.log("─────────────────────────────────────────────");
-  }
-
   start() {
     const port = System.config.server.getInteger("http_port", 3000);
     this.app.listen(port, () => {
-      console.log(`listening on port ${port}`);
+      console.log("system", system);
+      system.log.info(`listening on port ${port}`);
     });
   }
 }

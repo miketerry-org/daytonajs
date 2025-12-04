@@ -1,15 +1,14 @@
 // logger-factory.js:
-
+import system from "../export/system.js";
 import ConsoleLogger from "./console-logger.js";
 import FileLogger from "./file-logger.js";
 import MongoDBLogger from "./mongodb-logger.js";
 
 export default class LoggerFactory {
   static createLogger() {
-    const cfg = system.config.server;
-
+    const cfg = system.config?.server?.log;
     if (!cfg) {
-      throw new Error("system.config.server is not defined");
+      throw new Error("system.config.server.log is not defined");
     }
 
     const type = cfg.log_type || "console";
